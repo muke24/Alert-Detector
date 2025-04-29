@@ -2,6 +2,7 @@
 
 // TODO: Fix alert and icon naming confusion + Remove Heat level as its not an alert, but rather a calculation of multiple of the police alerts which is processed
 // on the other device and does not need to be displayed.
+// CHANGE ALL "ICON" NAMES TO "ALERT".
 
 // Keep in mind that an icon is a visual representation of an alert and they have the same indexes. 
 // They basically mean the same thing, but icon is in context of this ESP32 device (using this script), and alert is in context of the other ESP32 device (using a different script).
@@ -10,9 +11,9 @@
 // ALERT SELECTION:
 // The user may select multiple icons (up to "maxIconsSelected") by holding the button for "secondsToSelectIcon" seconds which will select/deselect
 // the center icon (when selected, the "selected" image will appear behind it). When a user selects/deselects an icon, we will then send data out from our rx/tx pins
-// to our other ESP32 device which will send out all the icon indexes which were selected. The other ESP32 device will receive the icons which were selected and send
-// a confirmation back via the rx/tx pins with the same int array we sent to it back to this device which we can confirm whether it matches our selected icon indexes
-// (if it doesn't then we can retry until it does).
+// to our other ESP32 device which will send out all the icon indexes which were selected (saved into an int array named "selectedIcons"). The other ESP32 device will
+// receive the icons which were selected and send a confirmation back via the rx/tx pins with the same int array we sent to it back to this device which we can confirm
+// whether it matches our selected icon indexes (if it doesn't then we can retry until it does).
 
 // DATA IN
 // ALERT RECEIVING: 
@@ -20,32 +21,40 @@
 // returns it a list of alerts with their location. The other ESP32 will then process the respective data for each selected alert and send this ESP32 a dictionary
 // consisting of the int index of the selected alert/icon and a float array holding its respective data.
 
-// HANDING EACH ICONS RECEIVED DATA
-// The float array received for each icon may be handled differently. Because of this, each icon needs to be processed differently using a different method.
-// Below shows some different pseudocode examples of the received data from the other ESP32 device (with what the value represents in brackets and the dictionary value in square brackets):
+// HANDLING EACH ICONS RECEIVED DATA
+// The float array received for each icon may be handled differently. Because of this, each icon should be processed differently using a different method for code clarity.
+// Shared logic can be bundled up in another method which all of these methods can use, such as the compass logic (because all alerts will use direction and distance).
+// All alerts will use direction and distance, however some may use another value. For example, this can be seen with a speedCamera alert and a traffic alert. 
+// The speedCamera will only receive the values of direction and distance, whilst the traffic alert will receive the values of direction, distance and also level. 
+// Each of these will be parameters in each alerts method. These methods will be used to control elements such the compass (the angle of the arrow, the color of 
+// the compass background, )
+// 
+// Below shows a pseudocode example of the received data from the other ESP32 device (with what the value represents in brackets and the dictionary value in square brackets):
 
-// The dictionary can contain all of the different icons, with all but the last entry being used to rotate a corresponding arrow on the display 
-// (if the icon supports it, the heat icon will not draw another arrow but is only used for the other ESP32 device).
-// This example shows that police was detected and it is facing -85 degrees from our direction (which should now show a green arrow pointing towards the left). It also shows that a speed camera was detected
-// Dictionary<[(index: police) 5, (data for this index) float[(direction: value between -90 to 90) -85f, (distance: in meters) 900f]], [(index: speedCamera) 6, (data for this index) float[(direction: value between -90 to 90) 70f], [(index: heat) 4, (data for this index) float[(heat level: value between 1 to 5) 3f]]>
+// The dictionary can contain all of the different alerts if they were detected on the other device, however we will only display up to 2 different arrows at once 
+// (which are the first 2 "selectedIcons", and the alert which is closer will determine which arrow will be layered on top of the other).
+// This example shows that police was detected and it is facing -85 degrees from our direction and is 700 meters away (which will now show a "policeColor" colored arrow pointing towards the left). 
+// It also shows that a speed camera was detected and it is facing 70 degrees from our direction and is 400 meters away (which will show a second arrow "speedCameraColor" colored which is layered above the first arrow because it is closer).
+// It also shows that traffic was detected and it is facing 20 degrees from our direction and is 900 meters away (which will not show anything because too many arrows will ruin the clarity of all of the arrows and it is the farthest).
+// Dictionary<[(index: police) 4, (data for this index) float[(direction: value between -90 to 90) -85f, (distance: in meters) 700f]], [(index: speedCamera) 5, (data for this index) float[(direction: value between -90 to 90) 70f, (distance: in meters) 400f], [(index: traffic) 6, (data for this index) float[(direction: value between -90 to 90) 20f, (distance: in meters) 900f, (level: value between 0 and 3) 3]]>
 
 // The selected icon indexes should be saved in storage so that they are kept when the device powers off.
 
 // Here is the correlating data that each icon index expects and its value's usage:
-// 0 (blockedLane): float - direction (rotates the corresponding arrow image), float - distance (ONLY USED IF FIRST ELEMENT IN DICTIONARY: Displays as text on the display)
-// 1 (closure): float - direction (rotates the corresponding arrow image), float - distance (ONLY USED IF FIRST ELEMENT IN DICTIONARY: Displays as text on the display)
-// 2 (crash): float - direction (rotates the arrow corresponding image), float - distance (ONLY USED IF FIRST ELEMENT IN DICTIONARY: Displays as text on the display)
-// 3 (hazard): float - direction (rotates the arrow corresponding image), float - distance (ONLY USED IF FIRST ELEMENT IN DICTIONARY: Displays as text on the display)
-// 4 (heat): null (nothing functionally happens on this device other than sending the other device data that this icon is selected) REMOVE THIS AS IT CAN BE FULLY PROCESSED IN THE OTHER SCRIPT
-// 5 (police): float - direction (rotates the arrow corresponding image), float - distance (ONLY USED IF FIRST ELEMENT IN DICTIONARY: Displays as text on the display)
-// 6 (speedCamera): float - direction (rotates the arrow corresponding image), float - distance (ONLY USED IF FIRST ELEMENT IN DICTIONARY: Displays as text on the display)
-// 7 (traffic): float - direction (rotates the arrow corresponding image), float - distance (ONLY USED IF FIRST ELEMENT IN DICTIONARY: Displays as text on the display)
+// 0 (blockedLane): float - direction (rotates the corresponding arrow image), float - distance (determines which layer the corresponding arrow image will be on if it is displayed)
+// 1 (closure): float - direction (rotates the corresponding arrow image), float - distance (determines which layer the corresponding arrow image will be on if it is displayed)
+// 2 (crash): float - direction (rotates the corresponding arrow image), float - distance (determines which layer the corresponding arrow image will be on if it is displayed)
+// 3 (hazard): float - direction (rotates the corresponding arrow image), float - distance (determines which layer the corresponding arrow image will be on if it is displayed)
+// 4 (police): float - direction (rotates the corresponding arrow image), float - distance (determines which layer the corresponding arrow image will be on if it is displayed)
+// 5 (speedCamera): float - direction (rotates the corresponding arrow image), float - distance (determines which layer the corresponding arrow image will be on if it is displayed)
+// 6 (traffic): float - direction (rotates the corresponding arrow image), float - distance (determines which layer the corresponding arrow image will be on if it is displayed), 
 
 // USER INTERFACE STATES
 // Startup State: 
-// All UI should start off fully transparent and should fade in from fully transparent to fully visible as a startup animation unless stated otherwise. The arrow 
-// should not be displayed unless the startup animation finishes and an alert is found and sent to this device. 
-// The background image should fade in from fully transparent to fully visible as a startup animation. The icons in the icon carousel should bounce up from the 
+// The arrow should not be displayed until the idle state has been reached and an alert was found. 
+// The background image should fade in from fully transparent to fully visible as a startup animation. The icons in the icon carousel should appear from the 
+// bottom of the screen (start off fully transparent and fade in to fully visible, have their position start below the visible area of the screen and move upwards until
+// they have reached their idle position)
 // During Startup:
 // Whilst a GPS and 4G connection are establishing, 
 // On Startup Finished:
