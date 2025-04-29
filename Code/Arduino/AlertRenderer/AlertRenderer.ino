@@ -23,14 +23,15 @@
 
 // HANDLING EACH ICONS RECEIVED DATA
 // The float array received for each icon may be handled differently. Because of this, each icon should be processed differently using a different method for code clarity.
-// Shared logic can be bundled up in another method which all of these methods can use, such as the compass logic (because all alerts will use direction and distance).
+// Shared logic can be bundled up in another method which all of these methods can use, such as the compass updating logic (because all alerts will use direction and distance).
 // All alerts will use direction and distance, however some may use another value. For example, this can be seen with a speedCamera alert and a traffic alert. 
 // The speedCamera will only receive the values of direction and distance, whilst the traffic alert will receive the values of direction, distance and also level. 
 // Each of these will be parameters in each alerts method. These methods will be used to control elements such the compass (the angle of the arrow, the color of 
-// the compass background, )
-// 
-// Below shows a pseudocode example of the received data from the other ESP32 device (with what the value represents in brackets and the dictionary value in square brackets):
+// the compass background and arrow depending on what type of alert was detected keeping in mind that the compass background will be the color of the closest alert).
+// For now, I am ignoring the extra parameters which are not either direction or distance, such as level which is included with the speedCamera alert. This is because I
+// plan to add that manually later, so nothing will happen for now if that parameter is received.
 
+// Below shows a pseudocode example of the received data from the other ESP32 device (with what the value represents in brackets and the dictionary value in square brackets):
 // The dictionary can contain all of the different alerts if they were detected on the other device, however we will only display up to 2 different arrows at once 
 // (which are the first 2 "selectedIcons", and the alert which is closer will determine which arrow will be layered on top of the other).
 // This example shows that police was detected and it is facing -85 degrees from our direction and is 700 meters away (which will now show a "policeColor" colored arrow pointing towards the left). 
@@ -40,14 +41,30 @@
 
 // The selected icon indexes should be saved in storage so that they are kept when the device powers off.
 
-// Here is the correlating data that each icon index expects and its value's usage:
-// 0 (blockedLane): float - direction (rotates the corresponding arrow image), float - distance (determines which layer the corresponding arrow image will be on if it is displayed)
-// 1 (closure): float - direction (rotates the corresponding arrow image), float - distance (determines which layer the corresponding arrow image will be on if it is displayed)
-// 2 (crash): float - direction (rotates the corresponding arrow image), float - distance (determines which layer the corresponding arrow image will be on if it is displayed)
-// 3 (hazard): float - direction (rotates the corresponding arrow image), float - distance (determines which layer the corresponding arrow image will be on if it is displayed)
-// 4 (police): float - direction (rotates the corresponding arrow image), float - distance (determines which layer the corresponding arrow image will be on if it is displayed)
-// 5 (speedCamera): float - direction (rotates the corresponding arrow image), float - distance (determines which layer the corresponding arrow image will be on if it is displayed)
-// 6 (traffic): float - direction (rotates the corresponding arrow image), float - distance (determines which layer the corresponding arrow image will be on if it is displayed), 
+// Here is the correlating data that each icon index expects and its parameters usage:
+// 0 (blockedLane): float - direction, float - distance.
+// 1 (closure): float - direction, float - distance.
+// 2 (crash): float - direction, float - distance.
+// 3 (hazard): float - direction, float - distance.
+// 4 (police): float - direction, float - distance.
+// 5 (speedCamera): float - direction, float - distance.
+// 6 (traffic): float - direction, float - distance, float level (converted to int).
+
+// Here is what the parameters do (received from the float arrow):
+// direction: Rotates the corresponding arrow image. Used with all alerts.
+// distance: Determines which layer the corresponding arrow image will be on if it is displayed. Used with all alerts.
+// level: Determines the level for an alert. For now, only the traffic alert will receive this parameter. However, it will not be used and is included for later development purposes.
+
+// COLORS
+// Each alert will have a different color which will be used for the compass arrow and background. This allows the user to differentiate between alerts which the compass
+// is pointing towards. Below is the RGB colors for each alert:
+// 0 (blockedLane): (R: 224, G: 70, B: 65) - red.
+// 1 (closure): (R: 255, G: 35, B: 196) - pink.
+// 2 (crash): (R: 58, G: 228, B: 255) - blue.
+// 3 (hazard): (R: 255, G: 255, B: 0) - yellow.
+// 4 (police): (R: 128, G: 255, B: 0) - green.
+// 5 (speedCamera): (R: 255, G: 174, B: 0) - orange.
+// 6 (traffic): (R: 149, G: 66, B: 221) - purple.
 
 // USER INTERFACE STATES
 // Startup State: 
@@ -81,10 +98,11 @@
 #include "images/closure.h"     // 1 - icon index
 #include "images/crash.h"       // 2 - icon index
 #include "images/hazard.h"      // 3 - icon index
-#include "images/heat.h"        // 4 - icon index: MAY NEED CHANGING
-#include "images/police.h"      // 5 - icon index
-#include "images/speedCamera.h" // 6 - icon index
-#include "images/traffic.h"     // 7 - icon index
+#include "images/police.h"      // 4 - icon index
+#include "images/speedCamera.h" // 5 - icon index
+#include "images/traffic.h"     // 6 - icon index
+
+//#include "images/heat.h"        // 7 - icon index: For later development. Ignore for now.
 
 // Other UI
 #include "images/selected.h"    // The icon background image which sits behind the selected icons.
