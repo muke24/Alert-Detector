@@ -1,0 +1,63 @@
+/* Set the background color of the screen to black */
+  lv_obj_set_style_bg_color(scr, lv_color_black(), LV_PART_MAIN);
+  lv_obj_set_style_bg_opa(scr, LV_OPA_COVER, LV_PART_MAIN);
+
+  /* Compass background image */
+  lv_obj_t *img_bg = lv_img_create(scr);
+  lv_img_set_src(img_bg, &compassBackground_img);
+  lv_obj_set_size(img_bg, screenWidth, screenHeight);
+  lv_obj_align(img_bg, LV_ALIGN_CENTER, 0, 0);
+
+  /* Compass arrow image on top */
+  lv_obj_t *img_arrow = lv_img_create(scr);
+  lv_img_set_src(img_arrow, &arrow_img);
+  lv_obj_align(img_arrow, LV_ALIGN_CENTER, 0, 0);
+
+  /* Create a container for alert icons at the bottom */
+  lv_obj_t *alert_container = lv_obj_create(scr);
+  lv_obj_set_size(alert_container, screenWidth, 40);  // Height adjusted for icons
+  lv_obj_align(alert_container, LV_ALIGN_BOTTOM_MID, 0, 0);
+  lv_obj_set_flex_flow(alert_container, LV_FLEX_FLOW_ROW);
+  lv_obj_set_flex_align(alert_container, LV_FLEX_ALIGN_SPACE_EVENLY, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
+
+  /* Add alert icons to the container */
+  lv_obj_t *img_blockedLane = lv_img_create(alert_container);
+  lv_img_set_src(img_blockedLane, &blockedLane_img);
+
+  lv_obj_t *img_closure = lv_img_create(alert_container);
+  lv_img_set_src(img_closure, &closure_img);
+
+  lv_obj_t *img_crash = lv_img_create(alert_container);
+  lv_img_set_src(img_crash, &crash_img);
+
+  lv_obj_t *img_hazard = lv_img_create(alert_container);
+  lv_img_set_src(img_hazard, &hazard_img);
+
+  lv_obj_t *img_police = lv_img_create(alert_container);
+  lv_img_set_src(img_police, &police_img);
+
+  lv_obj_t *img_speedCamera = lv_img_create(alert_container);
+  lv_img_set_src(img_speedCamera, &speedCamera_img);
+
+  lv_obj_t *img_traffic = lv_img_create(alert_container);
+  lv_img_set_src(img_traffic, &traffic_img);
+
+  /* Status indicators: GPS and Network */
+  lv_obj_t *img_gps = lv_img_create(scr);
+  lv_img_set_src(img_gps, &gps_img);
+  lv_obj_align(img_gps, LV_ALIGN_CENTER, -40, 40);  // Left of center, below arrow
+
+  lv_obj_t *img_network = lv_img_create(scr);
+  lv_img_set_src(img_network, &network_img);
+  lv_obj_align(img_network, LV_ALIGN_CENTER, 40, 40);  // Right of center, below arrow
+
+  /* Distance text */
+  lv_obj_t *label_distance = lv_label_create(scr);
+  lv_label_set_text(label_distance, "200m");
+  lv_obj_set_style_text_color(label_distance, lv_color_white(), 0);
+  lv_obj_align(label_distance, LV_ALIGN_CENTER, 0, 60);  // Below center, above alerts
+
+  /* Heat icon next to distance text */
+  lv_obj_t *img_heat = lv_img_create(scr);
+  lv_img_set_src(img_heat, &heat_img);
+  lv_obj_align_to(img_heat, label_distance, LV_ALIGN_OUT_RIGHT_MID, 10, 0);  // Right of distance text
