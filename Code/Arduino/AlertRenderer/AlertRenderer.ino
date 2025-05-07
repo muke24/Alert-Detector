@@ -1,10 +1,6 @@
 // Written by Peter Thompson
 
-// TODO: Fix alert and icon naming confusion.
-// CHANGE ALL "ICON" NAMES TO "ALERT".
-
-// Keep in mind that an icon is a visual representation of an alert and they use the same indexes. 
-// They basically mean the same thing, but icon is in context of this ESP32 device (using this script), and alert is in context of the other ESP32 device (using a different script).
+// TODO: Change speedCamera to camera.
 
 // DATA IN
 // ALERT RECEIVING: 
@@ -21,17 +17,19 @@
 // the compass background and arrow depending on what type of alert was detected keeping in mind that the compass background will be the color of the closest alert).
 // For now, I am ignoring the level parameter because I plan to add that manually later, so nothing will happen for now if that parameter is received.
 
-// Below shows a pseudocode example of the received data from the other ESP32 device (with what the value represents in brackets and the dictionary value in square brackets):
+// Below shows a pseudocode example of the received data from the other ESP32 device (with what the value represents in brackets and a dictionary-like value in square brackets):
 // The dictionary can contain all of the different alerts if they were detected on the other device, however we will only display up to 2 different arrows at once 
-// (which are the first 2 "selectedIcons", and the alert which is closer will determine which arrow will be layered on top of the other).
+// (which are the first 2 "selectedAlerts", and the alert which is closer will determine which arrow will be layered on top of the other).
 // This example shows that a police alert was detected and it is facing -85 degrees from our direction, is 700 meters away and has a level of 3.
 // It also shows that a speedCamera alert was detected and it is facing 70 degrees from our direction, is 400 meters away and has a level of 2.
 // It also shows that a traffic alert was detected and it is facing 20 degrees from our direction, is 900 meters away and has a level of 4.
 // {4: [-85, 700, 3], 5: [70, 400, 2], 6: [20, 900, 4]}
+// I have not yet coded the other device, so if there is a better way to send this data rather than a dictionary, please suggest it and apply it.
+// I don't want to include any libraries or the full C++ map, 
 
 // The selected icon indexes should be saved in storage so that they are kept when the device powers off.
 
-// Here is the correlating data that each icon index expects and its parameters usage:
+// Here is the correlating data that each alert icon index expects and its parameters usage:
 // 0 (blockedLane): float - direction, float - distance, float level (converted to int).
 // 1 (closure): float - direction, float - distance, float level (converted to int).
 // 2 (crash): float - direction, float - distance, float level (converted to int).
@@ -60,7 +58,7 @@
 // STARTUP STATE: (Animate to idle state)
 // Ignore for now, we can add animations later. I want to make sure the GUI is setup correctly before I animate it.
 
-// IDLE STATE:
+// IDLE STATE (The state which shows our compass, status images (when applicable), the icons representing the alerts which have been found, and the heat level of our selected heatLevelAlert):
 
 // UI
 // Compass Images: The compass is located on the top half of the device. It includes two images, the compassBackground image and the compassArrow image. The top center 
@@ -71,17 +69,34 @@
 // Keep in mind, "selectedAlerts" holds the indexes of our selected alerts in order of their importance (which can be changed by the user).
 // For example, it may hold something like [5, 4, 6], which means the speedCamera, police, and traffic alerts are selected and their importance is in that same order.
 // This means that when we retreive the alert data from the other ESP32, we will only pick out the data which is relevant if it exists (if it doesn't exist then the 
-// alert was never detected from the other ESP32 and we only pick out the data which does exist and is apart of our "selectedAlerts"). The data from the other ESP32 
-// will be received as a dictionary as mentioned with the dictionary pseudocode earlier. So if the dictionary received from the other ESP32 was: 
-// "{2: [-50, 300, 3], 4: [-85, 700, 3], 5: [70, 400, 2], 6: [20, 900, 4]}", then we should filter and save this data in a dictionary on this ESP32.
+// alert was never detected from the other ESP32 and we only pick out the data which does exist which is apart of our "selectedAlerts"). The data from the other ESP32 
+// should be received as a dictionary (as mentioned with the dictionary pseudocode earlier, it may not be a dictionary if there is a better solution). 
+// So if the dictionary received from the other ESP32 was: 
+// "{2: [-50, 300, 3], 4: [-85, 700, 3], 5: [70, 400, 2], 6: [20, 900, 4]}" than we should filter and save this data in a dictionary on this ESP32.
 // This would look like "{5: [70, 400, 2], 4: [-85, 700, 3], 6: [20, 900, 4]}" because our selected alerts were [5, 4, 6]. By doing this, the user can prioritise
 // the alerts which matters more to them if they coexist, and cut out alerts completely which they might not find useful. Alongside this, I would like a float value
-// which can actually balance the priority against the distance of each alert. For example, the user might find that they want alerts with the priority of [5, 4, 6]
+// which can actually balance the priority against the distance of each alert. For example, the user might find that they want alerts with the priority of [5, 4, 6] 
+// within the distance of 200m of us (any selected alert found within this radius will prioritise the selected alerts in the order that the user set).
 
 // Status Images: The status images are located on the sides of the arrow. They are both 32x16 images. The GPS status image should be on the left of the arrow, and the network
 // status image should be on the right of the arrow. The bottom of each image should be one pixel above the center of the screen. The arrow and both status images should 
 // not both appear at the same time, so visibility will not be an issue when the arrow is visible and is rotated. The top left of GPS status image should be located at 
-// x 62, y 103. The top left of the network image should be located at x 146, y 103. 
+// x 62, y 103. The top left of the network image should be located at x 146, y 103.
+
+// OTHER STATES:
+// There will be other states which will allow the user to customise their experience. These have not yet been included or designed.
+// I am thinking of doing something like this: The user can hold the button down for a couple of seconds which will make this device go into an "Options" state.
+// There will be multiple options, such as modifying the Distance Profiles (so the user can select the alerts which they want to see within each distance, from 
+// 1 to 5 distance profiles), UI customisation (which will allow the user to change the colour theme, UI differentiations, amount of arrows to display which can only 
+// be 1 or 2), device settings (changing the LED colour for the connected LED strip on the other ESP32 device and volume settings) and Alert Settings (Later in 
+// development, each alert will have subtypes which are basically a more accurate representation of the alert, for example: a camera subtype may be Red Light Cameras,
+// Speed Cameras, Stop Sign Cameras ect. Within Alert Settings, we can choose an alert and select or deselect the subtypes of it). For now, I will not include these for simplicity
+// and clarity, and will work on it once the idle state is completed.
+
+// COMPONENTS
+// ESP32C3 Dev Module 160MHz 
+//
+
 
 /* Include our libraries */
 #include <Arduino_GFX_Library.h>
@@ -90,6 +105,7 @@
 #include "freertos/task.h"
 #include <Encoder.h>
 #include <Bounce2.h>
+// Add more if needed.
 
 /* Include our images */
 // Compass UI Images
@@ -105,17 +121,27 @@
 #include "images/speedCamera.h" // 5 - icon index
 #include "images/traffic.h"     // 6 - icon index
 
-//#include "images/heat.h"        // 7 - icon index: For later development. Ignore for now.
+// Heat Images
+#include "images/heat.h"      // Heat icon - (non indexed on purpose)
+#include "images/heatBar1.h"  // This visually displays heat level 1
+#include "images/heatBar2.h"  // This visually displays heat level 2
+#include "images/heatBar3.h"  // This visually displays heat level 3
+#include "images/heatBar4.h"  // This visually displays heat level 4
+#include "images/heatBar5.h"  // This visually displays heat level 5
 
 // Other UI
-#include "images/selected.h"    // The icon background image which sits behind the selected icons.
+#include "images/selected.h"    // The icon background image which sits behind the selected icons. Will not be used in the Idle state.
 #include "images/gps"           // The GPS status image. Displays red (and flashes in and out) when no gps connection is found, disappears when connection exists.
 #include "images/network"       // The Network status image. Displays red (and flashes in and out) when no LTE or Wifi connection is found, disappears when connection exists.
 
+// Functional Variables (variables used for the functionality of this project)
+float selectMode = 2.5;           // How long the button needs to be pressed for to exit the idle state and enter the (replace me) state.
+DistanceProfile userProfile[3];   // These are the user selected distance profiles which hold the selected alerts for each distance.
+int heatLevelAlert = 0;           // The alert we will use to display its heat level (severity / intensity of the alert calculated from the other ESP32, e.g., 1 = low, 2 = low-medium, 3 = medium, 4 = high-medium, 5 = high).
+int currentUiState = 1;           // The current page index to be displayed. Right now, only the Idle state exists.
+// Add more if needed
 
-  // These are the alerts we want to track. The user may select any amount of 
-float selectMode = 2.5;         //How long the button needs to be pressed for 
-
+// Rendering
 #define GFX_BL 8
 
 Arduino_DataBus *bus = new Arduino_ESP32SPI(4 /* DC */, 10 /* CS */, 1 /* SCK */, 0 /* MOSI */, GFX_NOT_DEFINED /* MISO */);
@@ -128,10 +154,6 @@ Arduino_GFX *gfx = new Arduino_GC9A01(bus, GFX_NOT_DEFINED /* RST */, 0 /* rotat
 Encoder myEnc(ROTARY_ENCODER_A_PIN, ROTARY_ENCODER_B_PIN);
 Bounce2::Button button = Bounce2::Button();
 
-/* Functionality */
-IndexKeyValue alertData[7];
-
-
 /* Screen resolution */
 static uint32_t screenWidth = 240;
 static uint32_t screenHeight = 240;
@@ -141,7 +163,6 @@ lv_color_t *disp_draw_buf2;
 lv_disp_drv_t disp_drv;
 lv_group_t *group;
 
-// SETUP //
 /* Last encoder value for tracking changes */
 static int32_t last_encoder_value = 0;
 
@@ -179,25 +200,71 @@ static void my_button_read(lv_indev_drv_t *indev_drv, lv_indev_data_t *data) {
 void DisplayGUI(void) {
   lv_obj_t *scr = lv_scr_act();
 
+  // TODO: Fix any naming errors if they exist.
+
   /* Set the background color of the screen to black */
   lv_obj_set_style_bg_color(scr, lv_color_black(), LV_PART_MAIN);
   lv_obj_set_style_bg_opa(scr, LV_OPA_COVER, LV_PART_MAIN);
 
-  /* Background image */
+  /* Compass background image */
   lv_obj_t *img_bg = lv_img_create(scr);
-  lv_img_set_src(img_bg, &background_img);
+  lv_img_set_src(img_bg, &compassBackground_img);
   lv_obj_set_size(img_bg, screenWidth, screenHeight);
   lv_obj_align(img_bg, LV_ALIGN_CENTER, 0, 0);
 
-  /* Police icon image */
-  lv_obj_t *img_police = lv_img_create(scr);
-  lv_img_set_src(img_police, &policeIcon_img);
-  lv_obj_align(img_police, LV_ALIGN_CENTER, 0, 0);
-
-  /* Arrow image on top */
+  /* Compass arrow image on top */
   lv_obj_t *img_arrow = lv_img_create(scr);
   lv_img_set_src(img_arrow, &arrow_img);
   lv_obj_align(img_arrow, LV_ALIGN_CENTER, 0, 0);
+
+  /* Create a container for alert icons at the bottom */
+  lv_obj_t *alert_container = lv_obj_create(scr);
+  lv_obj_set_size(alert_container, screenWidth, 40);  // Height adjusted for icons
+  lv_obj_align(alert_container, LV_ALIGN_BOTTOM_MID, 0, 0);
+  lv_obj_set_flex_flow(alert_container, LV_FLEX_FLOW_ROW);
+  lv_obj_set_flex_align(alert_container, LV_FLEX_ALIGN_SPACE_EVENLY, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
+
+  /* Add alert icons to the container */
+  lv_obj_t *img_blockedLane = lv_img_create(alert_container);
+  lv_img_set_src(img_blockedLane, &blockedLane_img);
+
+  lv_obj_t *img_closure = lv_img_create(alert_container);
+  lv_img_set_src(img_closure, &closure_img);
+
+  lv_obj_t *img_crash = lv_img_create(alert_container);
+  lv_img_set_src(img_crash, &crash_img);
+
+  lv_obj_t *img_hazard = lv_img_create(alert_container);
+  lv_img_set_src(img_hazard, &hazard_img);
+
+  lv_obj_t *img_police = lv_img_create(alert_container);
+  lv_img_set_src(img_police, &police_img);
+
+  lv_obj_t *img_speedCamera = lv_img_create(alert_container);
+  lv_img_set_src(img_speedCamera, &speedCamera_img);
+
+  lv_obj_t *img_traffic = lv_img_create(alert_container);
+  lv_img_set_src(img_traffic, &traffic_img);
+
+  /* Status indicators: GPS and Network */
+  lv_obj_t *img_gps = lv_img_create(scr);
+  lv_img_set_src(img_gps, &gps_img);
+  lv_obj_align(img_gps, LV_ALIGN_CENTER, -40, 40);  // Left of center, below arrow
+
+  lv_obj_t *img_network = lv_img_create(scr);
+  lv_img_set_src(img_network, &network_img);
+  lv_obj_align(img_network, LV_ALIGN_CENTER, 40, 40);  // Right of center, below arrow
+
+  /* Distance text */
+  lv_obj_t *label_distance = lv_label_create(scr);
+  lv_label_set_text(label_distance, "200m");
+  lv_obj_set_style_text_color(label_distance, lv_color_white(), 0);
+  lv_obj_align(label_distance, LV_ALIGN_CENTER, 0, 60);  // Below center, above alerts
+
+  /* Heat icon next to distance text */
+  lv_obj_t *img_heat = lv_img_create(scr);
+  lv_img_set_src(img_heat, &heat_img);
+  lv_obj_align_to(img_heat, label_distance, LV_ALIGN_OUT_RIGHT_MID, 10, 0);  // Right of distance text
 }
 
 void InitDisplay()
@@ -312,24 +379,25 @@ struct Alert
 
   Alert(int _alertIndex, float _angle, float _distance, int _level) {
     alertIndex = _alertIndex;
-    data = new AlertData(_angle, _distance, _level);
+    data = AlertData(_angle, _distance, _level);
   };
 };
 
-// Distance Profiles allow the user to select which alerts can be active within a certain distance.
-// For example, I may only want to show certain alerts within 200m, whilst I may want to show different alerts within 500m (but above 200m).
+// Distance Profiles allow the user to select which alerts can be active within a certain distance of us and their priority.
+// Allows the user to select x alerts within y meters of us with different priorities. For example, this allows the user to prioritise traffic alerts over police alerts
+// within the distance of 200m - 500m, whilst police alerts may be prioritised over traffic alerts within the distance of 0m to 200m. In the case that police and traffic
+// both exist at both 0m - 200m and 200m - 500m, the closer Distance Profile will be used.
 struct DistanceProfile
 {
-  int distance;         // Less than or equal to this distance. In meters.
-  int allowedAlerts[7]; // The alerts allowed within this distance.
+  int distance;             // Less than or equal to this distance. In meters.
+  Alert selectedAlerts[7];  // The alerts allowed within this distance.
 
-  DistanceProfile(int _distance, int _allowedAlerts[7])
+  DistanceProfile(int _distance, Alert _selectedAlerts[7])
   {
     distance = _distance;
-    allowedAlerts = _allowedAlerts;
-  }
+    selectedAlerts = _selectedAlerts;
+  };
 };
 
-DistanceProfile distanceProfiles[7] = new DistanceProfile(200, {0, });
 
 }
