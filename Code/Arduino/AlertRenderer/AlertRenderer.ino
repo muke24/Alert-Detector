@@ -93,9 +93,24 @@
 // Speed Cameras, Stop Sign Cameras ect. Within Alert Settings, we can choose an alert and select or deselect the subtypes of it). For now, I will not include these for simplicity
 // and clarity, and will work on it once the idle state is completed.
 
-// COMPONENTS
-// ESP32C3 Dev Module 160MHz 
-//
+// COMPONENTS (In Context)
+// ESP32:
+// 1. ESP32C3 Dev Module
+// 2. CPU Frequency: 160MHz (WiFi)
+// 3. Flash Frequency: 80MHz
+// 4. Flash Mode: QIO 80MHz
+// 5. Flash Size: 4MB (32Mb)
+// 6. Partition Scheme: Default 4MB with spiffs (1.2MB APP/1.5MB SPIFFS)
+// 7. PSRAM: NO
+// PINOUT:
+// 
+
+
+// Screen
+// 1. 1.28 Inch Round screen
+// 2. 240x240 Pixels
+// 3. Button
+// 4. Rotary encoder knob
 
 
 /* Include our libraries */
