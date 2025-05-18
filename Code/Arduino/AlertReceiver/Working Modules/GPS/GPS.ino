@@ -59,6 +59,7 @@ struct Alert {
 };
 Alert* currentAlerts = nullptr;
 int alertCount = 0;
+float currentDirection = 0; // Current heading from IMU (degrees)
 
 // Function to calculate bounding box for Waze API
 struct BoundingArea {
@@ -84,7 +85,7 @@ BoundingArea boundingBox(Location location, float distanceInKm) {
 float calculateDistance(Location loc1, Location loc2) {
   float lat1 = loc1.latitude * PI / 180.0;
   float lat2 = loc2.latitude * PI / 180.0;
-  float lon1 = loc1.longitude * PI / 180.0;
+  float lon1 = loc2.longitude * PI / 180.0;
   float lon2 = loc2.longitude * PI / 180.0;
 
   float dLat = lat2 - lat1;
@@ -92,6 +93,34 @@ float calculateDistance(Location loc1, Location loc2) {
   float a = sin(dLat / 2) * sin(dLat / 2) + cos(lat1) * cos(lat2) * sin(dLon / 2) * sin(dLon / 2);
   float c = 2 * atan2(sqrt(a), sqrt(1 - a));
   return 6371.0 * c; // Earth's radius in kilometers
+}
+
+// Function to calculate bearing from one location to another
+float calculateAngle(Location from, Location to) {
+  float phi1 = from.latitude * PI / 180.0; // Latitude of current location
+  float phi2 = to.latitude * PI / 180.0;   // Latitude of alert location
+  float deltaLambda = (to.longitude - from.longitude) * PI / 180.0; // Longitude difference
+
+  float y = sin(deltaLambda) * cos(phi2);
+  float x = cos(phi1) * sin(phi2) - sin(phi1) * cos(phi2) * cos(deltaLambda);
+  float theta = atan2(y, x);
+
+  float bearing = (theta * 180.0 / PI + 360) - 180;
+  return bearing;
+}
+
+// Function to normalize angle to [-180, 180]
+float normalizeAngle(float angle) {
+  while (angle > 180) angle -= 360;
+  while (angle < -180) angle += 360;
+  return angle;
+}
+
+// Function to calculate relative angle to alert
+float calculateFacingDirection(Alert alert) {
+  float rawAngle = calculateAngle(currentLocation, alert.location);
+  float relativeAngle = rawAngle - currentDirection;
+  return normalizeAngle(relativeAngle);
 }
 
 void setup() {
@@ -171,13 +200,14 @@ void loop() {
     lastBnoRetry = currentTime;
   }
 
-  // Print IMU data every printInterval (500ms) if initialized
+  // Update IMU data and print every printInterval (500ms) if initialized
   if (bnoInitialized && (currentTime - lastImuPrint >= printInterval)) {
     sh2_SensorValue_t sensorValue;
     if (bno08x.getSensorEvent(&sensorValue) && sensorValue.sensorId == SH2_ROTATION_VECTOR) {
-      Serial.print("IMU Yaw: "); Serial.print(sensorValue.un.rotationVector.real);
-      Serial.print(", Pitch: "); Serial.print(sensorValue.un.rotationVector.i);
-      Serial.print(", Roll: "); Serial.println(sensorValue.un.rotationVector.j);
+      currentDirection = sensorValue.un.rotationVector.real * 180.0 / PI; // Convert quaternion to yaw (degrees)
+      Serial.print("IMU Yaw: "); Serial.print(currentDirection);
+      Serial.print(", Pitch: "); Serial.print(sensorValue.un.rotationVector.i * 180.0 / PI);
+      Serial.print(", Roll: "); Serial.println(sensorValue.un.rotationVector.j * 180.0 / PI);
       imuFailureCount = 0; // Reset failure count on successful read
     } else {
       Serial.println("IMU: No data");
@@ -244,16 +274,37 @@ void loop() {
                 currentAlerts[i].location.latitude = alerts[i]["location"]["y"].as<float>();
                 currentAlerts[i].location.longitude = alerts[i]["location"]["x"].as<float>();
                 currentAlerts[i].street = alerts[i]["street"].as<String>();
-                // Print alert details
-                Serial.println("Alert " + String(i + 1) + ":");
-                Serial.println("  Type: " + currentAlerts[i].type);
-                Serial.println("  Subtype: " + currentAlerts[i].subtype);
-                Serial.println("  Location: Lat=" + String(currentAlerts[i].location.latitude, 6) +
-                               ", Lon=" + String(currentAlerts[i].location.longitude, 6));
-                Serial.println("  Street: " + currentAlerts[i].street);
+              }
+            }
+            // Find and print closest police alert
+            if (alertCount > 0 && bnoInitialized) {
+              int closestIndex = -1;
+              float minDistance = 999999.0; // Large initial value
+              for (int i = 0; i < alertCount; i++) {
+                if (currentAlerts[i].type == "POLICE") {
+                  float distance = calculateDistance(currentLocation, currentAlerts[i].location);
+                  if (distance < minDistance) {
+                    minDistance = distance;
+                    closestIndex = i;
+                  }
+                }
+              }
+              if (closestIndex >= 0) {
+                Alert& alert = currentAlerts[closestIndex];
+                float relativeAngle = calculateFacingDirection(alert);
+                Serial.println("Closest Police Alert:");
+                Serial.println("  Type: " + alert.type);
+                Serial.println("  Subtype: " + alert.subtype);
+                Serial.println("  Location: Lat=" + String(alert.location.latitude, 6) +
+                               ", Lon=" + String(alert.location.longitude, 6));
+                Serial.println("  Street: " + alert.street);
+                Serial.println("  Distance: " + String(minDistance, 2) + " km");
+                Serial.println("  Relative Angle: " + String(relativeAngle, 1) + "° (0° is ahead)");
+              } else {
+                Serial.println("No police alerts found.");
               }
             } else {
-              Serial.println("No alerts found.");
+              Serial.println("No alerts found or IMU not initialized.");
             }
           }
         } else {
