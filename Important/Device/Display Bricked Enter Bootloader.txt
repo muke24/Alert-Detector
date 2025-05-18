@@ -1,0 +1,7 @@
+IF DEVICE DOES NOT SHOW IN ARDUINO IDE:
+To enter the bootloader on the "Viewe 1.28i Screen w ESP32C3":
+1. Unplug the usb from the adapter board which the device is plugged into via the ribbon cable.
+2. Hold down the button by pushing against the screen
+3. Whilst holding button down, plug the USB into the adapter board.
+4. Keep holding button until screen goes black.
+5. Fin
