@@ -9,8 +9,8 @@
 #include "compassArrow.h"
 
 #define GFX_BL 8
-#define UART_RX_PIN 20 // or try 20
-#define UART_TX_PIN 21 // or try 21
+#define UART_RX_PIN 6 // or try 20
+#define UART_TX_PIN 7 // or try 21
 
 Arduino_DataBus *bus = new Arduino_ESP32SPI(4 /* DC */, 10 /* CS */, 1 /* SCK */, 0 /* MOSI */, GFX_NOT_DEFINED /* MISO */);
 Arduino_GFX *gfx = new Arduino_GC9A01(bus, GFX_NOT_DEFINED /* RST */, 0 /* rotation */, true /* IPS */);
@@ -73,20 +73,27 @@ void update_arrow(lv_timer_t *timer) {
 void lv_example_page(void) {
   lv_obj_t *scr = lv_scr_act();
 
+  /* Set black background for the screen */
+  static lv_style_t style_screen;
+  lv_style_init(&style_screen);
+  lv_style_set_bg_color(&style_screen, lv_color_black());
+  lv_obj_add_style(scr, &style_screen, 0);
+
   /* Background image */
   lv_obj_t *img_bg = lv_img_create(scr);
   lv_img_set_src(img_bg, &compassBackground);
   lv_obj_set_size(img_bg, screenWidth, screenHeight / 2);
   lv_obj_align(img_bg, LV_ALIGN_CENTER, 0, 0);
   lv_obj_set_style_img_recolor(img_bg, lv_color_make(128, 255, 0), 0);
-  lv_obj_set_style_img_recolor_opa(img_bg, LV_OPA_COVER, 0);
+  lv_obj_set_style_img_recolor_opa(img_bg, 1, 0);
 
   /* Arrow image on top */
   img_arrow = lv_img_create(scr);
   lv_img_set_src(img_arrow, &compassArrow);
+  lv_img_set_pivot(img_arrow, 42, 120);
   lv_obj_align(img_arrow, LV_ALIGN_CENTER, 0, 0);
   lv_obj_set_style_img_recolor(img_arrow, lv_color_make(128, 255, 0), 0);
-  lv_obj_set_style_img_recolor_opa(img_arrow, LV_OPA_COVER, 0);
+  lv_obj_set_style_img_recolor_opa(img_arrow, 1, 0);
 }
 
 void setup() {
@@ -166,12 +173,11 @@ void uartTask(void *pvParameters) {
   while (true) {
     if (SerialUART.available()) {
       String data = SerialUART.readStringUntil('\n');
-      Serial.println(data); // Debug anything which was received.
-      if (data.startsWith("angle:")) {
-        String angleStr = data.substring(6);
-        currentAngle = angleStr.toFloat();
-        
-      }
+      float relativeAngle = data.toFloat();
+      Serial.print("Relative Angle: ");
+      Serial.print(String(relativeAngle)); // Debug anything which was received.
+      currentAngle = relativeAngle;
+      
     }
     vTaskDelay(pdMS_TO_TICKS(100));
   }

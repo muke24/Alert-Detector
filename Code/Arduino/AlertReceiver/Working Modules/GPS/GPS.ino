@@ -83,7 +83,7 @@ BoundingArea boundingBox(Location location, float distanceInKm) {
   float deltaLongitude = distanceInKm / (111.0 * cos(latInRadians)); // Adjust longitude span based on latitude (shrinks near poles)
 
   BoundingArea area;
-  area.left = location.longitude - deltaLongitude; // Set left boundary of bounding box
+  area.left = location.longitude - deltaLongitude;  // Set left boundary of bounding box
   area.bottom = location.latitude - deltaLatitude;  // Set bottom boundary of bounding box
   area.right = location.longitude + deltaLongitude; // Set right boundary of bounding box
   area.top = location.latitude + deltaLatitude;     // Set top boundary of bounding box
@@ -94,8 +94,8 @@ BoundingArea boundingBox(Location location, float distanceInKm) {
 // Parameters: loc1, loc2 - Locations to compare
 // Returns: Distance in kilometers
 float calculateDistance(Location loc1, Location loc2) {
-  float lat1 = loc1.latitude * PI / 180.0; // Convert loc1 latitude to radians
-  float lat2 = loc2.latitude * PI / 180.0; // Convert loc2 latitude to radians
+  float lat1 = loc1.latitude * PI / 180.0;  // Convert loc1 latitude to radians
+  float lat2 = loc2.latitude * PI / 180.0;  // Convert loc2 latitude to radians
   float lon1 = loc1.longitude * PI / 180.0; // Convert loc1 longitude to radians
   float lon2 = loc2.longitude * PI / 180.0; // Convert loc2 longitude to radians
 
@@ -177,7 +177,7 @@ void initCommSerial() {
   commSerial.begin(9600, SERIAL_8N1, 19, 18); // Start UART1 at 9600 baud, 8 data bits, no parity, 1 stop bit, on GPIO19 (RX) and GPIO18 (TX)
 }
 
-// Data Processing Functions
+// DATA PROCESSING FUNCTIONS
 
 // Updates GPS location from NEO-M8N
 void updateGPS() {
