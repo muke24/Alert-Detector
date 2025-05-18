@@ -2,6 +2,19 @@
 #include <TinyGPS++.h>
 #include <Wire.h>
 #include <Adafruit_BNO08x.h>
+#include <WiFi.h>
+#include <HTTPClient.h>
+#include <ArduinoJson.h>
+
+// Wi-Fi credentials
+const char* ssid = "BigCock69"; // Your Wi-Fi SSID
+const char* password = "GymBro69"; // Your Wi-Fi password
+
+// Waze API settings (from Unity script)
+const float maxDistanceKm = 1.0f; // Max distance for alerts (kilometers)
+const float checkInterval = 15.0f; // How often to check for new alerts (seconds)
+const float movementThreshold = 0.2f; // Distance to trigger alert check (kilometers)
+const char* baseUrl = "https://www.waze.com/live-map/api/georss";
 
 // Define the serial port for GPS (UART2 on ESP32)
 HardwareSerial gpsSerial(2);
@@ -23,20 +36,86 @@ const int maxImuFailures = 5; // Number of consecutive failures before reinitial
 unsigned long lastGpsPrint = 0;
 unsigned long lastImuPrint = 0;
 unsigned long lastBnoRetry = 0;
+unsigned long lastApiCall = 0; // For API call interval
+float timeSinceLastCheck = 0; // Timer for periodic API checks (seconds)
 const unsigned long printInterval = 500; // Print every 500ms
 const unsigned long retryInterval = 5000; // Retry BNO08X every 5 seconds
+
+// Location tracking
+struct Location {
+  float latitude;
+  float longitude;
+};
+Location currentLocation = {0, 0};
+Location lastCheckedLocation = {0, 0};
+bool isLocationInitialized = false;
+
+// Alert structure to store Waze API data
+struct Alert {
+  String type;
+  String subtype;
+  Location location;
+  String street;
+};
+Alert* currentAlerts = nullptr;
+int alertCount = 0;
+
+// Function to calculate bounding box for Waze API
+struct BoundingArea {
+  float top;
+  float bottom;
+  float left;
+  float right;
+};
+BoundingArea boundingBox(Location location, float distanceInKm) {
+  float latInRadians = location.latitude * PI / 180.0;
+  float deltaLatitude = distanceInKm / 111.0;
+  float deltaLongitude = distanceInKm / (111.0 * cos(latInRadians));
+
+  BoundingArea area;
+  area.left = location.longitude - deltaLongitude;
+  area.bottom = location.latitude - deltaLatitude;
+  area.right = location.longitude + deltaLongitude;
+  area.top = location.latitude + deltaLatitude;
+  return area;
+}
+
+// Function to calculate distance between two locations (Haversine formula)
+float calculateDistance(Location loc1, Location loc2) {
+  float lat1 = loc1.latitude * PI / 180.0;
+  float lat2 = loc2.latitude * PI / 180.0;
+  float lon1 = loc1.longitude * PI / 180.0;
+  float lon2 = loc2.longitude * PI / 180.0;
+
+  float dLat = lat2 - lat1;
+  float dLon = lon2 - lon1;
+  float a = sin(dLat / 2) * sin(dLat / 2) + cos(lat1) * cos(lat2) * sin(dLon / 2) * sin(dLon / 2);
+  float c = 2 * atan2(sqrt(a), sqrt(1 - a));
+  return 6371.0 * c; // Earth's radius in kilometers
+}
 
 void setup() {
   // Initialize the console serial port
   Serial.begin(115200);
   Serial.println("ESP32 is running!");
-  
+
+  // Connect to Wi-Fi
+  WiFi.begin(ssid, password);
+  Serial.print("Connecting to Wi-Fi");
+  while (WiFi.status() != WL_CONNECTED) {
+    delay(500);
+    Serial.print(".");
+  }
+  Serial.println("\nConnected to Wi-Fi");
+  Serial.print("IP Address: ");
+  Serial.println(WiFi.localIP());
+
   // Initialize GPS serial port on GPIO16 (RX) and GPIO17 (TX)
   gpsSerial.begin(9600);
-  
+
   // Initialize I2C bus on default pins (GPIO21 SDA, GPIO22 SCL)
   Wire.begin();
-  
+
   // Attempt to initialize BNO08X IMU at address 0x4B
   if (!bno08x.begin_I2C(0x4B)) {
     Serial.println("Failed to find BNO08X during setup. Will retry in loop...");
@@ -56,6 +135,17 @@ void loop() {
 
   // Get current time
   unsigned long currentTime = millis();
+  timeSinceLastCheck += (currentTime - lastApiCall) / 1000.0; // Update timer in seconds
+
+  // Update current location from GPS
+  if (gps.location.isValid()) {
+    currentLocation.latitude = gps.location.lat();
+    currentLocation.longitude = gps.location.lng();
+    if (!isLocationInitialized) {
+      lastCheckedLocation = currentLocation;
+      isLocationInitialized = true;
+    }
+  }
 
   // Print GPS data every printInterval (500ms)
   if (currentTime - lastGpsPrint >= printInterval) {
@@ -103,5 +193,79 @@ void loop() {
     }
 
     lastImuPrint = currentTime;
+  }
+
+  // Check Wi-Fi status and reconnect if disconnected
+  if (WiFi.status() != WL_CONNECTED) {
+    Serial.println("Wi-Fi disconnected. Reconnecting...");
+    WiFi.reconnect();
+    while (WiFi.status() != WL_CONNECTED) {
+      delay(500);
+      Serial.print(".");
+    }
+    Serial.println("\nReconnected to Wi-Fi");
+  }
+
+  // Check if it's time to fetch Waze API data
+  if (isLocationInitialized) {
+    float distanceMoved = calculateDistance(currentLocation, lastCheckedLocation);
+    if ((timeSinceLastCheck >= checkInterval || distanceMoved > movementThreshold) && WiFi.status() == WL_CONNECTED) {
+      // Build Waze API URL
+      BoundingArea area = boundingBox(currentLocation, maxDistanceKm);
+      String url = String(baseUrl) + "?top=" + String(area.top, 6) + "&bottom=" + String(area.bottom, 6) +
+                   "&left=" + String(area.left, 6) + "&right=" + String(area.right, 6) + "&env=row&types=alerts";
+
+      HTTPClient http;
+      http.begin(url);
+      int httpCode = http.GET();
+
+      if (httpCode > 0) {
+        if (httpCode == HTTP_CODE_OK) {
+          String payload = http.getString();
+          // Parse JSON response
+          DynamicJsonDocument doc(2048); // Adjust size based on expected response
+          DeserializationError error = deserializeJson(doc, payload);
+          if (error) {
+            Serial.println("JSON parsing failed: " + String(error.c_str()));
+          } else {
+            JsonArray alerts = doc["alerts"];
+            alertCount = alerts.size();
+            // Free previous alerts array if it exists
+            if (currentAlerts != nullptr) {
+              delete[] currentAlerts;
+              currentAlerts = nullptr;
+            }
+            // Allocate new alerts array
+            if (alertCount > 0) {
+              currentAlerts = new Alert[alertCount];
+              for (int i = 0; i < alertCount; i++) {
+                currentAlerts[i].type = alerts[i]["type"].as<String>();
+                currentAlerts[i].subtype = alerts[i]["subtype"].as<String>();
+                currentAlerts[i].location.latitude = alerts[i]["location"]["y"].as<float>();
+                currentAlerts[i].location.longitude = alerts[i]["location"]["x"].as<float>();
+                currentAlerts[i].street = alerts[i]["street"].as<String>();
+                // Print alert details
+                Serial.println("Alert " + String(i + 1) + ":");
+                Serial.println("  Type: " + currentAlerts[i].type);
+                Serial.println("  Subtype: " + currentAlerts[i].subtype);
+                Serial.println("  Location: Lat=" + String(currentAlerts[i].location.latitude, 6) +
+                               ", Lon=" + String(currentAlerts[i].location.longitude, 6));
+                Serial.println("  Street: " + currentAlerts[i].street);
+              }
+            } else {
+              Serial.println("No alerts found.");
+            }
+          }
+        } else {
+          Serial.printf("Waze API call failed, HTTP code: %d\n", httpCode);
+        }
+      } else {
+        Serial.println("Waze API call failed, error: " + String(http.errorToString(httpCode).c_str()));
+      }
+      http.end();
+      lastCheckedLocation = currentLocation;
+      timeSinceLastCheck = 0;
+      lastApiCall = currentTime;
+    }
   }
 }
