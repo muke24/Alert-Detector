@@ -16,8 +16,9 @@ const float checkInterval = 15.0f; // How often to check for new alerts (seconds
 const float movementThreshold = 0.2f; // Distance to trigger alert check (kilometers)
 const char* baseUrl = "https://www.waze.com/live-map/api/georss";
 
-// Define the serial port for GPS (UART2 on ESP32)
-HardwareSerial gpsSerial(2);
+// Define serial ports
+HardwareSerial gpsSerial(2); // UART2 for GPS
+HardwareSerial commSerial(1); // UART1 for loopback communication
 
 // TinyGPS++ object for parsing GPS data
 TinyGPSPlus gps;
@@ -37,9 +38,11 @@ unsigned long lastGpsPrint = 0;
 unsigned long lastImuPrint = 0;
 unsigned long lastBnoRetry = 0;
 unsigned long lastApiCall = 0; // For API call interval
+unsigned long lastReceivePrint = 0; // For printing received data
 float timeSinceLastCheck = 0; // Timer for periodic API checks (seconds)
 const unsigned long printInterval = 500; // Print every 500ms
 const unsigned long retryInterval = 5000; // Retry BNO08X every 5 seconds
+const unsigned long receivePrintInterval = 1000; // Print received data every 1000ms
 
 // Location tracking
 struct Location {
@@ -85,7 +88,7 @@ BoundingArea boundingBox(Location location, float distanceInKm) {
 float calculateDistance(Location loc1, Location loc2) {
   float lat1 = loc1.latitude * PI / 180.0;
   float lat2 = loc2.latitude * PI / 180.0;
-  float lon1 = loc2.longitude * PI / 180.0;
+  float lon1 = loc1.longitude * PI / 180.0;
   float lon2 = loc2.longitude * PI / 180.0;
 
   float dLat = lat2 - lat1;
@@ -124,9 +127,12 @@ float calculateFacingDirection(Alert alert) {
 }
 
 void setup() {
-  // Initialize the console serial port
+  // Initialize the console serial port (UART0)
   Serial.begin(115200);
-  Serial.println("ESP32 is running!");
+  Serial.println("ESP32 Loopback Test is running!");
+
+  // Initialize communication serial port (UART1) on GPIO19 (RX), GPIO18 (TX)
+  commSerial.begin(9600, SERIAL_8N1, 19, 18); // RX=GPIO19, TX=GPIO18
 
   // Connect to Wi-Fi
   WiFi.begin(ssid, password);
@@ -160,6 +166,23 @@ void loop() {
   // Read GPS data continuously
   while (gpsSerial.available() > 0) {
     gps.encode(gpsSerial.read());
+  }
+
+  // Read from commSerial (UART1) for loopback testing
+  if (commSerial.available()) {
+    unsigned long currentTime = millis();
+    if (currentTime - lastReceivePrint >= receivePrintInterval) {
+      String data = commSerial.readStringUntil('\n');
+      float relativeAngle = data.toFloat();
+      if (relativeAngle <= 180.0 && relativeAngle >= -180.0) {
+        Serial.print("Received Relative Angle: ");
+        Serial.print(relativeAngle, 1);
+        Serial.println("° (0° is ahead)");
+      } else {
+        Serial.println("No valid police alert received.");
+      }
+      lastReceivePrint = currentTime;
+    }
   }
 
   // Get current time
@@ -276,7 +299,7 @@ void loop() {
                 currentAlerts[i].street = alerts[i]["street"].as<String>();
               }
             }
-            // Find and print closest police alert
+            // Find and process closest police alert
             if (alertCount > 0 && bnoInitialized) {
               int closestIndex = -1;
               float minDistance = 999999.0; // Large initial value
@@ -300,11 +323,17 @@ void loop() {
                 Serial.println("  Street: " + alert.street);
                 Serial.println("  Distance: " + String(minDistance, 2) + " km");
                 Serial.println("  Relative Angle: " + String(relativeAngle, 1) + "° (0° is ahead)");
+                // Send relative angle via UART1
+                commSerial.println(String(relativeAngle, 1));
               } else {
                 Serial.println("No police alerts found.");
+                // Send a sentinel value (e.g., 999.0) to indicate no alert
+                commSerial.println("999.0");
               }
             } else {
               Serial.println("No alerts found or IMU not initialized.");
+              // Send a sentinel value (e.g., 999.0) to indicate no alert
+              commSerial.println("999.0");
             }
           }
         } else {
