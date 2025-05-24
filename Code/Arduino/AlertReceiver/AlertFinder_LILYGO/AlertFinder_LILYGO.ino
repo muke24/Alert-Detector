@@ -1,40 +1,12 @@
 // AlertFinder_LILYGO.ino
 // This sketch uses a LILYGO T-SIM7000G to fetch police alerts from the Waze API using GPS coordinates from the SIM7000G module,
-// calculates the relative angle to the closest police alert using BNO08X IMU data, and sends the angle
+// calculates the relative angle to the closest police alert using BNO08X IMU data via SPI, and sends the angle
 // via UART1 (loopback on GPIO18 TX to GPIO19 RX for testing). It prioritizes Wi-Fi for internet access,
 // falling back to cellular (GPRS via SIM7000G) if Wi-Fi is unavailable, and logs data to the Serial Monitor for debugging.
 
-// Libraries
-#include <HardwareSerial.h> // For UART communication (loopback)
-#include <TinyGsmClient.h>  // For SIM7000G modem communication
-#include <TinyGPS++.h>      // For parsing GPS data (fallback)
-#include <Wire.h>           // For I2C communication with BNO08X IMU
-#include <Adafruit_BNO08x.h> // For BNO08X IMU
-#include <WiFi.h>           // For Wi-Fi connectivity
-#include <HTTPClient.h>     // For HTTP requests to Waze API
-#include <ArduinoJson.h>    // For parsing JSON responses from Waze API
-
-// Configuration Constants
-// Wi-Fi credentials
-const char* ssid = "BigCock69";     // Wi-Fi SSID
-const char* password = "GymBro69";  // Wi-Fi password
-
-// GPRS credentials for cellular connection
-const char apn[] = ""; // SET TO YOUR APN
-const char gprsUser[] = "";
-const char gprsPass[] = "";
-
-// Waze API settings
-const float maxDistanceKm = 1.0f;      // Max distance for alerts (kilometers)
-const float checkInterval = 15.0f;     // Interval to check for new alerts (seconds)
-const float movementThreshold = 0.2f;  // Distance to trigger alert check (kilometers)
-const char* baseUrl = "https://www.waze.com/live-map/api/georss"; // Waze API endpoint
-
-// Timing constants
-const unsigned long printInterval = 500;         // Print GPS/IMU data every 500ms
-const unsigned long retryInterval = 5000;        // Retry BNO08X initialization every 5 seconds
-const unsigned long receivePrintInterval = 1000; // Print received UART data every 1000ms
-const int maxImuFailures = 5;                   // Max consecutive IMU failures before reinitialization
+// **IMPORTANT**: For the BNO08X IMU, ensure it is set to SPI mode by connecting P0 to GND and P1 to VCC (for Adafruit breakouts).
+// Check your specific breakout’s documentation for correct mode configuration.
+// BNO08X INT pin is connected to GPIO33, and RST pin is connected to GPIO32.
 
 // SIM7000G Configuration
 #define TINY_GSM_MODEM_SIM7000
@@ -45,12 +17,55 @@ const int maxImuFailures = 5;                   // Max consecutive IMU failures 
 #define PIN_RX 26
 #define PWR_PIN 4
 
+// SPI Pins for BNO08X
+#define BNO08X_CS   21  // Chip Select pin for SPI
+#define BNO08X_SCK  18  // SPI Clock
+#define BNO08X_MISO 19  // SPI MISO
+#define BNO08X_MOSI 23  // SPI MOSI
+#define BNO08X_INT  33  // Interrupt pin
+#define BNO08X_RST  32  // Reset pin (changed from GPIO34 to GPIO32)
+
+// Libraries
+#include <HardwareSerial.h>  // For UART communication (loopback)
+#include <TinyGsmClient.h>   // For SIM7000G modem communication
+#include <TinyGPS++.h>       // For parsing GPS data (fallback)
+#include <SPI.h>             // For SPI communication with BNO08X
+#include <Adafruit_BNO08x.h> // For BNO08X IMU via SPI
+#include <WiFi.h>            // For Wi-Fi connectivity
+#include <HTTPClient.h>      // For HTTP requests to Waze API (Wi-Fi only)
+#include <ArduinoJson.h>     // For parsing JSON responses from Waze API
+
+// Configuration Constants
+// Wi-Fi credentials
+const char* ssid = "BigCock69";     // Replace with your Wi-Fi SSID
+const char* password = "GymBro69";  // Replace with your Wi-Fi password
+
+// GPRS credentials for cellular connection
+const char apn[] = ""; // SET TO YOUR APN
+const char gprsUser[] = "";
+const char gprsPass[] = "";
+
+// Waze API settings
+const float maxDistanceKm = 1.0f;      // Max distance for alerts (kilometers)
+const float checkInterval = 15.0f;     // Interval to check for new alerts (seconds)
+const float movementThreshold = 0.2f;  // Distance to trigger alert check (kilometers)
+const char* baseHost = "www.waze.com"; // Waze API host
+const char* basePath = "/live-map/api/georss"; // Waze API path
+
+// Timing constants
+const unsigned long printInterval = 500;         // Print GPS/IMU data every 500ms
+const unsigned long retryInterval = 5000;        // Retry BNO08X initialization every 5 seconds
+const unsigned long receivePrintInterval = 1000; // Print received UART data every 1000ms
+const int maxImuFailures = 5;                    // Max consecutive IMU failures before reinitialization
+
+
+
 // Hardware Objects
 HardwareSerial commSerial(1);  // UART1 for loopback communication (GPIO19 RX, GPIO18 TX)
-TinyGsm modem(SerialAT);      // TinyGSM modem object for SIM7000G
+TinyGsm modem(SerialAT);       // TinyGSM modem object for SIM7000G
 TinyGsmClient gsmClient(modem); // TinyGSM client for cellular HTTP requests
-TinyGPSPlus gps;              // TinyGPS++ object for parsing GPS data (fallback)
-Adafruit_BNO08x bno08x;       // BNO08X IMU object for orientation data
+TinyGPSPlus gps;               // TinyGPS++ object for parsing GPS data (fallback)
+Adafruit_BNO08x bno08x;        // BNO08X IMU object for orientation data via SPI
 
 // State Variables
 bool bnoInitialized = false;            // Tracks BNO08X initialization status
@@ -91,86 +106,70 @@ struct BoundingArea {
 
 // Utility Functions
 
-// Converts quaternion to yaw angle in degrees
-float quaternionToYaw(float q0, float q1, float q2, float q3) {
-    return atan2(2*(q0*q3 + q1*q2), 1 - 2*(q2*q2 + q3*q3)) * 180.0 / PI;
-}
-
 // Calculates bounding box around a location for Waze API
-// Parameters: location - Center location; distanceInKm - Radius in kilometers
-// Returns: BoundingArea struct with top, bottom, left, right coordinates
 BoundingArea boundingBox(Location location, float distanceInKm) {
-  float latInRadians = location.latitude * PI / 180.0; // Convert latitude to radians for trigonometric calculations
-  float deltaLatitude = distanceInKm / 111.0; // Approx 111 km per degree of latitude, calculates latitude span
-  float deltaLongitude = distanceInKm / (111.0 * cos(latInRadians)); // Adjust longitude span based on latitude (shrinks near poles)
+  float latInRadians = location.latitude * PI / 180.0;
+  float deltaLatitude = distanceInKm / 111.0;
+  float deltaLongitude = distanceInKm / (111.0 * cos(latInRadians));
 
   BoundingArea area;
-  area.left = location.longitude - deltaLongitude;  // Set left boundary of bounding box
-  area.bottom = location.latitude - deltaLatitude;  // Set bottom boundary of bounding box
-  area.right = location.longitude + deltaLongitude; // Set right boundary of bounding box
-  area.top = location.latitude + deltaLatitude;     // Set top boundary of bounding box
-  return area; // Return the computed bounding box
+  area.left = location.longitude - deltaLongitude;
+  area.bottom = location.latitude - deltaLatitude;
+  area.right = location.longitude + deltaLongitude;
+  area.top = location.latitude + deltaLatitude;
+  return area;
 }
 
 // Calculates distance between two locations using Haversine formula
-// Parameters: loc1, loc2 - Locations to compare
-// Returns: Distance in kilometers
 float calculateDistance(Location loc1, Location loc2) {
-  float lat1 = loc1.latitude * PI / 180.0;  // Convert loc1 latitude to radians
-  float lat2 = loc2.latitude * PI / 180.0;  // Convert loc2 latitude to radians
-  float lon1 = loc1.longitude * PI / 180.0; // Convert loc1 longitude to radians
-  float lon2 = loc2.longitude * PI / 180.0; // Convert loc2 longitude to radians
+  float lat1 = loc1.latitude * PI / 180.0;
+  float lat2 = loc2.latitude * PI / 180.0;
+  float lon1 = loc1.longitude * PI / 180.0;
+  float lon2 = loc2.longitude * PI / 180.0;
 
-  float dLat = lat2 - lat1; // Calculate latitude difference
-  float dLon = lon2 - lon1; // Calculate longitude difference
-  float a = sin(dLat / 2) * sin(dLat / 2) + cos(lat1) * cos(lat2) * sin(dLon / 2) * sin(dLon / 2); // Haversine formula: compute great-circle distance
-  float c = 2 * atan2(sqrt(a), sqrt(1 - a)); // Angular distance on sphere
-  return 6371.0 * c; // Multiply by Earth's radius to get distance in kilometers
+  float dLat = lat2 - lat1;
+  float dLon = lon2 - lon1;
+  float a = sin(dLat / 2) * sin(dLat / 2) + cos(lat1) * cos(lat2) * sin(dLon / 2) * sin(dLon / 2);
+  float c = 2 * atan2(sqrt(a), sqrt(1 - a));
+  return 6371.0 * c;
 }
 
 // Calculates bearing from one location to another
-// Parameters: from - Starting location; to - Target location
-// Returns: Bearing in degrees
 float calculateAngle(Location from, Location to) {
-  float phi1 = from.latitude * PI / 180.0; // Convert start latitude to radians
-  float phi2 = to.latitude * PI / 180.0;   // Convert target latitude to radians
-  float deltaLambda = (to.longitude - from.longitude) * PI / 180.0; // Convert longitude difference to radians
+  float phi1 = from.latitude * PI / 180.0;
+  float phi2 = to.latitude * PI / 180.0;
+  float deltaLambda = (to.longitude - from.longitude) * PI / 180.0;
 
-  float y = sin(deltaLambda) * cos(phi2); // Calculate y-component of bearing
-  float x = cos(phi1) * sin(phi2) - sin(phi1) * cos(phi2) * cos(deltaLambda); // Calculate x-component of bearing
-  float theta = atan2(y, x); // Compute bearing angle in radians
+  float y = sin(deltaLambda) * cos(phi2);
+  float x = cos(phi1) * sin(phi2) - sin(phi1) * cos(phi2) * cos(deltaLambda);
+  float theta = atan2(y, x);
 
-  float bearing = (theta * 180.0 / PI + 360) - 180; // Convert to degrees and shift to [-180, 180] range
-  return bearing; // Return the bearing angle
+  float bearing = (theta * 180.0 / PI + 360) - 180;
+  return bearing;
 }
 
 // Normalizes an angle to [-180, 180] range
-// Parameters: angle - Angle in degrees
-// Returns: Normalized angle in degrees
 float normalizeAngle(float angle) {
-  while (angle > 180) angle -= 360; // Subtract 360 until angle is <= 180
-  while (angle < -180) angle += 360; // Add 360 until angle is >= -180
-  return angle; // Return normalized angle
+  while (angle > 180) angle -= 360;
+  while (angle < -180) angle += 360;
+  return angle;
 }
 
 // Calculates relative angle to an alert relative to current heading
-// Parameters: alert - Alert to calculate angle for
-// Returns: Relative angle in degrees (0° is ahead)
 float calculateFacingDirection(Alert alert) {
-  float rawAngle = calculateAngle(currentLocation, alert.location); // Get absolute bearing to alert
-  float relativeAngle = rawAngle - currentDirection; // Subtract current IMU heading to get relative angle
-  return normalizeAngle(relativeAngle); // Normalize to [-180, 180] range
+  float rawAngle = calculateAngle(currentLocation, alert.location);
+  float relativeAngle = rawAngle - currentDirection;
+  return normalizeAngle(relativeAngle);
 }
 
 // Hardware Initialization Functions
 
 // Initializes Wi-Fi and cellular connections
 void initWiFi() {
-  // Try Wi-Fi first
-  WiFi.begin(ssid, password); // Start Wi-Fi connection with provided credentials
+  WiFi.begin(ssid, password);
   Serial.print("Connecting to Wi-Fi");
   unsigned long start = millis();
-  while (WiFi.status() != WL_CONNECTED && millis() - start < 10000) { // Try for 10 seconds
+  while (WiFi.status() != WL_CONNECTED && millis() - start < 10000) {
     delay(500);
     Serial.print(".");
   }
@@ -178,13 +177,12 @@ void initWiFi() {
     Serial.println("\nConnected to Wi-Fi");
     Serial.print("IP Address: ");
     Serial.println(WiFi.localIP());
-    isGprsConnected = false; // Wi-Fi is active, no need for GPRS
+    isGprsConnected = false;
     return;
   }
 
-  // Wi-Fi failed, try cellular
   Serial.println("\nWi-Fi connection failed. Attempting cellular connection...");
-  if (!modem.waitForNetwork(30000L)) { // Wait up to 30 seconds for network
+  if (!modem.waitForNetwork(30000L)) {
     Serial.println("Failed to connect to cellular network");
     return;
   }
@@ -200,29 +198,25 @@ void initWiFi() {
   Serial.println(modem.localIP());
 }
 
-// Initializes GPS and modem on Serial1 (GPIO26 RX, GPIO27 TX for SIM7000G)
+// Initializes GPS and modem on Serial1
 void initGPS() {
-  // Set PWR_PIN for GPS power control
   pinMode(PWR_PIN, OUTPUT);
-  digitalWrite(PWR_PIN, HIGH); // Set high initially
+  digitalWrite(PWR_PIN, HIGH);
   delay(300);
-  digitalWrite(PWR_PIN, LOW); // Pulse low to power on
-  delay(1000); // Hold low for 1 second
-  digitalWrite(PWR_PIN, HIGH); // Release
+  digitalWrite(PWR_PIN, LOW);
+  delay(1000);
+  digitalWrite(PWR_PIN, HIGH);
 
-  // Initialize serial for SIM7000G
   SerialAT.begin(UART_BAUD, SERIAL_8N1, PIN_RX, PIN_TX);
   delay(1000);
 
-  // Initialize modem
   Serial.println("Initializing modem...");
   if (!modem.restart()) {
     Serial.println("Failed to restart modem, attempting to continue without restarting");
-    modem.init(); // Fallback to init if restart fails
+    modem.init();
   }
 
-  // Enable GPS
-  modem.sendAT("+SGPIO=0,4,1,1"); // Turn on GPS power (GPIO4)
+  modem.sendAT("+SGPIO=0,4,1,1");
   if (modem.waitResponse(10000L) != 1) {
     Serial.println("Failed to power on GPS");
   } else {
@@ -231,28 +225,39 @@ void initGPS() {
   modem.enableGPS();
 }
 
-// Initializes IMU (BNO08X) on I2C (GPIO21 SDA, GPIO22 SCL)
+// Initializes IMU (BNO08X) on SPI
 void initIMU() {
-  if (!bno08x.begin_I2C(0x4B)) { // Attempt to initialize BNO08X at I2C address 0x4B
+  // Configure RST and INT pins
+  pinMode(BNO08X_RST, OUTPUT);
+  pinMode(BNO08X_INT, INPUT);
+  
+  // Perform reset sequence
+  digitalWrite(BNO08X_RST, LOW);
+  delay(10); // Hold low for at least 10ms
+  digitalWrite(BNO08X_RST, HIGH);
+  delay(50); // Wait for sensor to stabilize
+
+  SPI.begin(BNO08X_SCK, BNO08X_MISO, BNO08X_MOSI, BNO08X_CS);
+
+  if (!bno08x.begin_SPI(BNO08X_CS, BNO08X_INT, &SPI)) {
     Serial.println("Failed to find BNO08X during setup. Will retry in loop...");
-    bnoInitialized = false; // Mark IMU as uninitialized
+    bnoInitialized = false;
   } else {
-    Serial.println("BNO08X initialized successfully!");
-    bno08x.enableReport(SH2_ROTATION_VECTOR); // Enable rotation vector reports for orientation data
-    bnoInitialized = true; // Mark IMU as initialized
+    Serial.println("BNO08X initialized successfully via SPI!");
+    bno08x.enableReport(SH2_ROTATION_VECTOR);
+    bnoInitialized = true;
   }
 }
 
-// Initializes UART1 for loopback communication (GPIO19 RX, GPIO18 TX)
+// Initializes UART1 for loopback communication
 void initCommSerial() {
-  commSerial.begin(9600, SERIAL_8N1, 19, 18); // Start UART1 at 9600 baud, 8 data bits, no parity, 1 stop bit
+  commSerial.begin(9600, SERIAL_8N1, 19, 18);
 }
 
 // Data Processing Functions
 
 // Updates GPS location from SIM7000G
 void updateGPS() {
-  // Try TinyGSM's getGPS method first
   float lat, lon;
   if (modem.getGPS(&lat, &lon)) {
     if (lat != 0 && lon != 0) {
@@ -266,12 +271,8 @@ void updateGPS() {
     }
   }
 
-  // Fallback: Try parsing NMEA sentences with TinyGPS++
   while (SerialAT.available() > 0) {
-    char c = SerialAT.read();
-    gps.encode(c); // Feed incoming bytes to TinyGPS++ for parsing
-    // Optionally log raw NMEA for debugging
-    // Serial.write(c);
+    gps.encode(SerialAT.read());
   }
 
   if (gps.location.isValid()) {
@@ -286,7 +287,7 @@ void updateGPS() {
 
 // Prints GPS data to Serial Monitor
 void printGPS(unsigned long currentTime) {
-  if (currentTime - lastGpsPrint >= printInterval) { // Check if 500ms has passed since last print
+  if (currentTime - lastGpsPrint >= printInterval) {
     if (gps.location.isValid() || (currentLocation.latitude != 0 && currentLocation.longitude != 0)) {
       Serial.print("GPS Lat: "); Serial.print(currentLocation.latitude, 6);
       Serial.print(", Lon: "); Serial.println(currentLocation.longitude, 6);
@@ -305,26 +306,34 @@ void updateIMU(unsigned long currentTime) {
   }
 
   if (bnoInitialized && (currentTime - lastImuPrint >= printInterval)) {
-    sh2_SensorValue_t sensorValue;
-    if (bno08x.getSensorEvent(&sensorValue) && sensorValue.sensorId == SH2_ROTATION_VECTOR) {
-      // Use quaternionToYaw to calculate yaw from quaternion components
-      currentDirection = quaternionToYaw(
-        sensorValue.un.rotationVector.real,  // q0 (real component)
-        sensorValue.un.rotationVector.i,     // q1
-        sensorValue.un.rotationVector.j,     // q2
-        sensorValue.un.rotationVector.k      // q3
-      );
-      Serial.print("IMU Yaw: "); Serial.print(currentDirection);
-      Serial.print(", Pitch: "); Serial.print(sensorValue.un.rotationVector.i * 180.0 / PI);
-      Serial.print(", Roll: "); Serial.println(sensorValue.un.rotationVector.j * 180.0 / PI);
-      imuFailureCount = 0;
+    // Check if new data is available via INT pin (active low)
+    if (digitalRead(BNO08X_INT) == LOW) {
+      sh2_SensorValue_t sensorValue;
+      if (bno08x.getSensorEvent(&sensorValue) && sensorValue.sensorId == SH2_ROTATION_VECTOR) {
+        float q0 = sensorValue.un.rotationVector.real;
+        float q1 = sensorValue.un.rotationVector.i;
+        float q2 = sensorValue.un.rotationVector.j;
+        float q3 = sensorValue.un.rotationVector.k;
+        currentDirection = atan2(2 * (q0 * q3 + q1 * q2), 1 - 2 * (q2 * q2 + q3 * q3)) * 180.0 / PI;
+        Serial.print("IMU Yaw: "); Serial.print(currentDirection);
+        Serial.print(", Pitch: "); Serial.print(atan2(2 * (q0 * q2 - q3 * q1), 1 - 2 * (q2 * q2 + q1 * q1)) * 180.0 / PI);
+        Serial.print(", Roll: "); Serial.println(asin(2 * (q0 * q1 + q2 * q3)) * 180.0 / PI);
+        imuFailureCount = 0;
+      } else {
+        Serial.println("IMU: No data");
+        imuFailureCount++;
+      }
     } else {
-      Serial.println("IMU: No data");
-      imuFailureCount++;
+      Serial.println("IMU: Waiting for interrupt");
+      return; // Skip reading if no interrupt
     }
 
     if (imuFailureCount >= maxImuFailures) {
       Serial.println("BNO08X appears to be disconnected. Attempting to reinitialize...");
+      digitalWrite(BNO08X_RST, LOW);
+      delay(10); // Reset sensor
+      digitalWrite(BNO08X_RST, HIGH);
+      delay(50); // Wait for stabilization
       bnoInitialized = false;
       imuFailureCount = 0;
       lastBnoRetry = 0;
@@ -333,7 +342,7 @@ void updateIMU(unsigned long currentTime) {
   }
 }
 
-// Maintains internet connection (Wi-Fi or cellular)
+// Maintains internet connection
 void maintainWiFi() {
   if (WiFi.status() == WL_CONNECTED) {
     if (isGprsConnected) {
@@ -341,10 +350,9 @@ void maintainWiFi() {
       isGprsConnected = false;
       Serial.println("Switched to Wi-Fi");
     }
-    return; // Wi-Fi is active, no action needed
+    return;
   }
 
-  // Wi-Fi is disconnected, try reconnecting
   Serial.println("Wi-Fi disconnected. Reconnecting...");
   WiFi.reconnect();
   unsigned long start = millis();
@@ -362,7 +370,6 @@ void maintainWiFi() {
     return;
   }
 
-  // Wi-Fi reconnect failed, try cellular
   if (!isGprsConnected) {
     Serial.println("\nWi-Fi reconnect failed. Attempting cellular connection...");
     if (!modem.isNetworkConnected()) {
@@ -382,52 +389,98 @@ void maintainWiFi() {
   }
 }
 
+// Performs HTTP GET request over cellular using TinyGsmClient
+bool performCellularHttpGet(const String& host, const String& path, String& response) {
+  // Connect to the server
+  if (!gsmClient.connect(host.c_str(), 443)) {
+    Serial.println("Failed to connect to Waze server via cellular");
+    return false;
+  }
+
+  // Build the HTTP GET request
+  String request = "GET " + path + " HTTP/1.1\r\n";
+  request += "Host: " + host + "\r\n";
+  request += "Connection: close\r\n";
+  request += "\r\n";
+
+  // Send the request
+  gsmClient.print(request);
+
+  // Read response
+  unsigned long timeout = millis();
+  while (gsmClient.connected() && millis() - timeout < 10000L) {
+    if (gsmClient.available()) {
+      response = gsmClient.readString();
+      break;
+    }
+  }
+
+  // Close connection
+  gsmClient.stop();
+
+  // Extract payload (skip HTTP headers)
+  int headerEnd = response.indexOf("\r\n\r\n");
+  if (headerEnd != -1) {
+    response = response.substring(headerEnd + 4);
+  } else {
+    Serial.println("Failed to parse cellular HTTP response");
+    return false;
+  }
+
+  return true;
+}
+
 // Fetches and processes Waze API data
 void fetchWazeData(unsigned long currentTime) {
-  if (!isLocationInitialized) return; // Exit if GPS location is not yet valid
+  if (!isLocationInitialized) return;
 
   float distanceMoved = calculateDistance(currentLocation, lastCheckedLocation);
   if (timeSinceLastCheck < checkInterval && distanceMoved <= movementThreshold) return;
 
-  // Check for internet connectivity
   if (WiFi.status() != WL_CONNECTED && !isGprsConnected) {
     Serial.println("No internet connection available");
     return;
   }
 
-  // Build API URL
+  // Build API path
   BoundingArea area = boundingBox(currentLocation, maxDistanceKm);
-  String url = String(baseUrl) + "?top=" + String(area.top, 6) + "&bottom=" + String(area.bottom, 6) +
-               "&left=" + String(area.left, 6) + "&right=" + String(area.right, 6) + "&env=row&types=alerts";
+  String path = String(basePath) + "?top=" + String(area.top, 6) + "&bottom=" + String(area.bottom, 6) +
+                "&left=" + String(area.left, 6) + "&right=" + String(area.right, 6) + "&env=row&types=alerts";
 
-  HTTPClient http;
+  String payload;
   if (WiFi.status() == WL_CONNECTED) {
     Serial.println("Using Wi-Fi for Waze API request");
-    http.begin(url); // Use Wi-Fi
+    HTTPClient http;
+    WiFiClient client;
+    String url = "https://" + String(baseHost) + path;
+    http.begin(client, url);
+    int httpCode = http.GET();
+    if (httpCode <= 0) {
+      Serial.println("Waze API call failed, error: " + String(http.errorToString(httpCode).c_str()));
+      http.end();
+      return;
+    }
+    if (httpCode != HTTP_CODE_OK) {
+      Serial.printf("Waze API call failed, HTTP code: %d\n", httpCode);
+      http.end();
+      return;
+    }
+    payload = http.getString();
+    http.end();
   } else {
     Serial.println("Using cellular for Waze API request");
-    http.begin(gsmClient, url); // Use cellular
+    String response;
+    if (!performCellularHttpGet(baseHost, path, response)) {
+      Serial.println("Waze API call failed via cellular");
+      return;
+    }
+    payload = response;
   }
 
-  int httpCode = http.GET();
-  if (httpCode <= 0) {
-    Serial.println("Waze API call failed, error: " + String(http.errorToString(httpCode).c_str()));
-    http.end();
-    return;
-  }
-
-  if (httpCode != HTTP_CODE_OK) {
-    Serial.printf("Waze API call failed, HTTP code: %d\n", httpCode);
-    http.end();
-    return;
-  }
-
-  String payload = http.getString();
   DynamicJsonDocument doc(2048);
   DeserializationError error = deserializeJson(doc, payload);
   if (error) {
     Serial.println("JSON parsing failed: " + String(error.c_str()));
-    http.end();
     return;
   }
 
@@ -451,13 +504,12 @@ void fetchWazeData(unsigned long currentTime) {
   }
 
   processAlerts();
-  http.end();
   lastCheckedLocation = currentLocation;
   timeSinceLastCheck = 0;
   lastApiCall = currentTime;
 }
 
-// Processes alerts to find closest police alert and send relative angle
+// Processes alerts to find closest police alert
 void processAlerts() {
   if (alertCount == 0 || !bnoInitialized) {
     Serial.println("No alerts found or IMU not initialized.");
@@ -495,7 +547,7 @@ void processAlerts() {
   }
 }
 
-// Handles UART loopback communication (used for debugging sent data)
+// Handles UART loopback communication
 void handleCommSerial(unsigned long currentTime) {
   if (!commSerial.available()) return;
 
@@ -522,7 +574,6 @@ void setup() {
   initWiFi();
   initGPS();
   initIMU();
-  Wire.begin();
 }
 
 void loop() {
