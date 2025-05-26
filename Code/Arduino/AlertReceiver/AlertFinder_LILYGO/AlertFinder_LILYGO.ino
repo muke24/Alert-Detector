@@ -1,7 +1,7 @@
 // AlertFinder_LILYGO.ino
 // This sketch uses a LILYGO T-SIM7000G to fetch police alerts from the Waze API using GPS coordinates from the SIM7000G module,
 // calculates the relative angle to the closest police alert using HMC5883L magnetometer data via I2C, and sends the angle
-// via UART1 (loopback on GPIO18 TX to GPIO19 RX for testing). It prioritizes Wi-Fi for internet access,
+// via UART1 (loopback on GPIO32 TX to GPIO33 RX for testing). It prioritizes Wi-Fi for internet access,
 // falling back to cellular (GPRS via SIM7000G) if Wi-Fi is unavailable, and logs data to the Serial Monitor for debugging.
 
 // SIM7000G Configuration
@@ -16,6 +16,9 @@
 // ESP32 Communication
 #define COMM_TX 32
 #define COMM_RX 33
+// Alternative pins for testing (uncomment to use)
+// #define COMM_TX 16
+// #define COMM_RX 17
 
 // Libraries
 #include <HardwareSerial.h>  // For UART communication (loopback)
@@ -29,80 +32,70 @@
 #include <ArduinoJson.h>     // For parsing JSON responses from Waze API
 
 // Configuration Constants
-// Wi-Fi credentials
 const char* ssid = "BigCock69";     // Replace with your Wi-Fi SSID
 const char* password = "GymBro69";  // Replace with your Wi-Fi password
-
-// GPRS credentials for cellular connection
 const char apn[] = ""; // SET TO YOUR APN
 const char gprsUser[] = "";
 const char gprsPass[] = "";
-
-// Waze API settings
 const float maxDistanceKm = 10.0f;      // Max distance for alerts (kilometers)
 const float checkInterval = 15.0f;     // Interval to check for new alerts (seconds)
 const float movementThreshold = 0.2f;  // Distance to trigger alert check (kilometers)
 const char* baseHost = "www.waze.com"; // Waze API host
 const char* basePath = "/live-map/api/georss"; // Waze API path
-
-// Timing constants
 const unsigned long printInterval = 500;         // Print GPS/IMU data every 500ms
 const unsigned long retryInterval = 5000;        // Retry HMC5883L initialization every 5 seconds
 const unsigned long receivePrintInterval = 1000; // Print received UART data every 1000ms
 const int maxImuFailures = 5;                    // Max consecutive IMU failures before reinitialization
 
 // Hardware Objects
-HardwareSerial commSerial(1);  // UART1 for loopback communication (GPIO19 RX, GPIO18 TX)
+HardwareSerial commSerial(2);  // UART1 for loopback communication
 TinyGsm modem(SerialAT);       // TinyGSM modem object for SIM7000G
 TinyGsmClient gsmClient(modem); // TinyGSM client for cellular HTTP requests
 TinyGPSPlus gps;               // TinyGPS++ object for parsing GPS data (fallback)
 Adafruit_HMC5883_Unified mag = Adafruit_HMC5883_Unified(12345); // HMC5883L magnetometer object for heading data via I2C
 
 // State Variables
-bool bnoInitialized = false;            // Tracks HMC5883L initialization status
-int imuFailureCount = 0;                // Counts consecutive IMU data failures
-unsigned long lastGpsPrint = 0;         // Timestamp for last GPS print
-unsigned long lastImuPrint = 0;         // Timestamp for last IMU print
-unsigned long lastBnoRetry = 0;         // Timestamp for last HMC5883L retry
-unsigned long lastApiCall = 0;          // Timestamp for last Waze API call
-unsigned long lastReceivePrint = 0;     // Timestamp for last UART receive print
-float timeSinceLastCheck = 0;           // Timer for periodic API checks (seconds)
-bool isLocationInitialized = false;     // Tracks if GPS location is initialized
-float currentDirection = 0;             // Current heading from HMC5883L (degrees)
-bool isGprsConnected = false;           // Tracks cellular connection status
+bool bnoInitialized = false;
+int imuFailureCount = 0;
+unsigned long lastGpsPrint = 0;
+unsigned long lastImuPrint = 0;
+unsigned long lastBnoRetry = 0;
+unsigned long lastApiCall = 0;
+unsigned long lastReceivePrint = 0;
+float timeSinceLastCheck = 0;
+bool isLocationInitialized = false;
+float currentDirection = 0;
+bool isGprsConnected = false;
 
 // Data Structures
 struct Location {
-  float latitude;   // Latitude in degrees
-  float longitude;  // Longitude in degrees
+  float latitude;
+  float longitude;
 };
-Location currentLocation = {0, 0};      // Current GPS location
-Location lastCheckedLocation = {0, 0};  // Last location checked for alerts
+Location currentLocation = {0, 0};
+Location lastCheckedLocation = {0, 0};
 
 struct Alert {
-  String type;       // Alert type (e.g., "POLICE")
-  String subtype;    // Alert subtype
-  Location location; // Alert location (lat, lon)
-  String street;     // Street name of alert
+  String type;
+  String subtype;
+  Location location;
+  String street;
 };
-Alert* currentAlerts = nullptr; // Dynamic array of current alerts
-int alertCount = 0;             // Number of alerts in currentAlerts
+Alert* currentAlerts = nullptr;
+int alertCount = 0;
 
 struct BoundingArea {
-  float top;    // Top latitude of bounding box
-  float bottom; // Bottom latitude of bounding box
-  float left;   // Left longitude of bounding box
-  float right;  // Right longitude of bounding box
+  float top;
+  float bottom;
+  float left;
+  float right;
 };
 
 // Utility Functions
-
-// Calculates bounding box around a location for Waze API
 BoundingArea boundingBox(Location location, float distanceInKm) {
   float latInRadians = location.latitude * PI / 180.0;
   float deltaLatitude = distanceInKm / 111.0;
   float deltaLongitude = distanceInKm / (111.0 * cos(latInRadians));
-
   BoundingArea area;
   area.left = location.longitude - deltaLongitude;
   area.bottom = location.latitude - deltaLatitude;
@@ -111,13 +104,11 @@ BoundingArea boundingBox(Location location, float distanceInKm) {
   return area;
 }
 
-// Calculates distance between two locations using Haversine formula
 float calculateDistance(Location loc1, Location loc2) {
   float lat1 = loc1.latitude * PI / 180.0;
   float lat2 = loc2.latitude * PI / 180.0;
   float lon1 = loc1.longitude * PI / 180.0;
   float lon2 = loc2.longitude * PI / 180.0;
-
   float dLat = lat2 - lat1;
   float dLon = lon2 - lon1;
   float a = sin(dLat / 2) * sin(dLat / 2) + cos(lat1) * cos(lat2) * sin(dLon / 2) * sin(dLon / 2);
@@ -125,28 +116,23 @@ float calculateDistance(Location loc1, Location loc2) {
   return 6371.0 * c;
 }
 
-// Calculates bearing from one location to another
 float calculateAngle(Location from, Location to) {
   float phi1 = from.latitude * PI / 180.0;
   float phi2 = to.latitude * PI / 180.0;
   float deltaLambda = (to.longitude - from.longitude) * PI / 180.0;
-
   float y = sin(deltaLambda) * cos(phi2);
   float x = cos(phi1) * sin(phi2) - sin(phi1) * cos(phi2) * cos(deltaLambda);
   float theta = atan2(y, x);
-
   float bearing = (theta * 180.0 / PI + 360) - 180;
   return bearing;
 }
 
-// Normalizes an angle to [-180, 180] range
 float normalizeAngle(float angle) {
   while (angle > 180) angle -= 360;
   while (angle < -180) angle += 360;
   return angle;
 }
 
-// Calculates relative angle to an alert relative to current heading
 float calculateFacingDirection(Alert alert) {
   float rawAngle = calculateAngle(currentLocation, alert.location);
   float relativeAngle = rawAngle - currentDirection;
@@ -154,8 +140,6 @@ float calculateFacingDirection(Alert alert) {
 }
 
 // Hardware Initialization Functions
-
-// Initializes Wi-Fi and cellular connections
 void initWiFi() {
   WiFi.begin(ssid, password);
   Serial.print("Connecting to Wi-Fi");
@@ -171,14 +155,12 @@ void initWiFi() {
     isGprsConnected = false;
     return;
   }
-
   Serial.println("\nWi-Fi connection failed. Attempting cellular connection...");
   if (!modem.waitForNetwork(30000L)) {
     Serial.println("Failed to connect to cellular network");
     return;
   }
   Serial.println("Cellular network connected");
-
   if (!modem.gprsConnect(apn, gprsUser, gprsPass)) {
     Serial.println("Failed to connect to GPRS");
     return;
@@ -189,7 +171,6 @@ void initWiFi() {
   Serial.println(modem.localIP());
 }
 
-// Initializes GPS and modem on Serial1
 void initGPS() {
   pinMode(PWR_PIN, OUTPUT);
   digitalWrite(PWR_PIN, HIGH);
@@ -197,16 +178,13 @@ void initGPS() {
   digitalWrite(PWR_PIN, LOW);
   delay(1000);
   digitalWrite(PWR_PIN, HIGH);
-
   SerialAT.begin(UART_BAUD, SERIAL_8N1, PIN_RX, PIN_TX);
   delay(1000);
-
   Serial.println("Initializing modem...");
   if (!modem.restart()) {
     Serial.println("Failed to restart modem, attempting to continue without restarting");
     modem.init();
   }
-
   modem.sendAT("+SGPIO=0,4,1,1");
   if (modem.waitResponse(10000L) != 1) {
     Serial.println("Failed to power on GPS");
@@ -216,9 +194,8 @@ void initGPS() {
   modem.enableGPS();
 }
 
-// Initializes HMC5883L on I2C
 void initHMC5883L() {
-  Wire.begin(21, 22); // Initialize I2C on pins 21 (SDA) and 22 (SCL)
+  Wire.begin(21, 22);
   if (!mag.begin()) {
     Serial.println("Failed to find HMC5883L. Check wiring!");
     bnoInitialized = false;
@@ -228,14 +205,18 @@ void initHMC5883L() {
   }
 }
 
-// Initializes UART1 for loopback communication
 void initCommSerial() {
-  commSerial.begin(9600, SERIAL_8N1, COMM_RX, COMM_TX);
+  commSerial.begin(115200, SERIAL_8N2, COMM_RX, COMM_TX);
+  Serial.print("UART1 initialized for loopback: GPIO");
+  Serial.print(COMM_TX);
+  Serial.print(" (TX) to GPIO");
+  Serial.print(COMM_RX);
+  Serial.println(" (RX)");
+  // Clear any stale data
+  while (commSerial.available()) commSerial.read();
 }
 
 // Data Processing Functions
-
-// Updates GPS location from SIM7000G
 void updateGPS() {
   float lat, lon;
   if (modem.getGPS(&lat, &lon)) {
@@ -249,11 +230,9 @@ void updateGPS() {
       return;
     }
   }
-
   while (SerialAT.available() > 0) {
     gps.encode(SerialAT.read());
   }
-
   if (gps.location.isValid()) {
     currentLocation.latitude = gps.location.lat();
     currentLocation.longitude = gps.location.lng();
@@ -264,7 +243,6 @@ void updateGPS() {
   }
 }
 
-// Prints GPS data to Serial Monitor
 void printGPS(unsigned long currentTime) {
   if (currentTime - lastGpsPrint >= printInterval) {
     if (gps.location.isValid() || (currentLocation.latitude != 0 && currentLocation.longitude != 0)) {
@@ -277,13 +255,11 @@ void printGPS(unsigned long currentTime) {
   }
 }
 
-// Updates IMU data and handles failures
 void updateIMU(unsigned long currentTime) {
   if (!bnoInitialized && (currentTime - lastBnoRetry >= retryInterval)) {
     initHMC5883L();
     lastBnoRetry = currentTime;
   }
-
   if (bnoInitialized && (currentTime - lastImuPrint >= printInterval)) {
     sensors_event_t event;
     if (mag.getEvent(&event)) {
@@ -297,7 +273,6 @@ void updateIMU(unsigned long currentTime) {
       Serial.println("HMC5883L: No data");
       imuFailureCount++;
     }
-
     if (imuFailureCount >= maxImuFailures) {
       Serial.println("HMC5883L appears to be disconnected. Attempting to reinitialize...");
       bnoInitialized = false;
@@ -307,7 +282,6 @@ void updateIMU(unsigned long currentTime) {
   }
 }
 
-// Maintains internet connection
 void maintainWiFi() {
   if (WiFi.status() == WL_CONNECTED) {
     if (isGprsConnected) {
@@ -317,7 +291,6 @@ void maintainWiFi() {
     }
     return;
   }
-
   Serial.println("Wi-Fi disconnected. Reconnecting...");
   WiFi.reconnect();
   unsigned long start = millis();
@@ -325,7 +298,6 @@ void maintainWiFi() {
     delay(500);
     Serial.print(".");
   }
-
   if (WiFi.status() == WL_CONNECTED) {
     Serial.println("\nReconnected to Wi-Fi");
     if (isGprsConnected) {
@@ -334,7 +306,6 @@ void maintainWiFi() {
     }
     return;
   }
-
   if (!isGprsConnected) {
     Serial.println("\nWi-Fi reconnect failed. Attempting cellular connection...");
     if (!modem.isNetworkConnected()) {
@@ -354,24 +325,16 @@ void maintainWiFi() {
   }
 }
 
-// Performs HTTP GET request over cellular using TinyGsmClient
 bool performCellularHttpGet(const String& host, const String& path, String& response) {
-  // Connect to the server
   if (!gsmClient.connect(host.c_str(), 443)) {
     Serial.println("Failed to connect to Waze server via cellular");
     return false;
   }
-
-  // Build the HTTP GET request
   String request = "GET " + path + " HTTP/1.1\r\n";
   request += "Host: " + host + "\r\n";
   request += "Connection: close\r\n";
   request += "\r\n";
-
-  // Send the request
   gsmClient.print(request);
-
-  // Read response
   unsigned long timeout = millis();
   while (gsmClient.connected() && millis() - timeout < 10000L) {
     if (gsmClient.available()) {
@@ -379,11 +342,7 @@ bool performCellularHttpGet(const String& host, const String& path, String& resp
       break;
     }
   }
-
-  // Close connection
   gsmClient.stop();
-
-  // Extract payload (skip HTTP headers)
   int headerEnd = response.indexOf("\r\n\r\n");
   if (headerEnd != -1) {
     response = response.substring(headerEnd + 4);
@@ -391,27 +350,20 @@ bool performCellularHttpGet(const String& host, const String& path, String& resp
     Serial.println("Failed to parse cellular HTTP response");
     return false;
   }
-
   return true;
 }
 
-// Fetches and processes Waze API data
 void fetchWazeData(unsigned long currentTime) {
   if (!isLocationInitialized) return;
-
   float distanceMoved = calculateDistance(currentLocation, lastCheckedLocation);
   if (timeSinceLastCheck < checkInterval && distanceMoved <= movementThreshold) return;
-
   if (WiFi.status() != WL_CONNECTED && !isGprsConnected) {
     Serial.println("No internet connection available");
     return;
   }
-
-  // Build API path
   BoundingArea area = boundingBox(currentLocation, maxDistanceKm);
   String path = String(basePath) + "?top=" + String(area.top, 6) + "&bottom=" + String(area.bottom, 6) +
                 "&left=" + String(area.left, 6) + "&right=" + String(area.right, 6) + "&env=row&types=alerts";
-
   String payload;
   if (WiFi.status() == WL_CONNECTED) {
     Serial.println("Using Wi-Fi for Waze API request");
@@ -419,9 +371,9 @@ void fetchWazeData(unsigned long currentTime) {
     Serial.println(WiFi.status());
     HTTPClient http;
     WiFiClientSecure client;
-    client.setInsecure(); // Skip certificate verification for testing
+    client.setInsecure();
     String url = "https://" + String(baseHost) + path;
-    http.setTimeout(10000); // Set 10-second timeout
+    http.setTimeout(10000);
     if (!http.begin(client, url)) {
       Serial.println("Failed to begin HTTP connection");
       http.end();
@@ -449,22 +401,18 @@ void fetchWazeData(unsigned long currentTime) {
     }
     payload = response;
   }
-
   DynamicJsonDocument doc(2048);
   DeserializationError error = deserializeJson(doc, payload);
   if (error) {
     Serial.println("JSON parsing failed: " + String(error.c_str()));
     return;
   }
-
   JsonArray alerts = doc["alerts"];
   alertCount = alerts.size();
-
   if (currentAlerts != nullptr) {
     delete[] currentAlerts;
     currentAlerts = nullptr;
   }
-
   if (alertCount > 0) {
     currentAlerts = new Alert[alertCount];
     for (int i = 0; i < alertCount; i++) {
@@ -475,21 +423,25 @@ void fetchWazeData(unsigned long currentTime) {
       currentAlerts[i].street = alerts[i]["street"].as<String>();
     }
   }
-
-  processAlerts();
+  processAlerts(currentTime);
   lastCheckedLocation = currentLocation;
   timeSinceLastCheck = 0;
   lastApiCall = currentTime;
 }
 
-// Processes alerts to find closest police alert
-void processAlerts() {
+void processAlerts(unsigned long currentTime) {
   if (alertCount == 0 || !bnoInitialized) {
     Serial.println("No alerts found or IMU not initialized.");
-    commSerial.println("999.0");
+    float noAlert = 999.0;
+    while (commSerial.available()) commSerial.read(); // Clear buffer
+    commSerial.write((uint8_t*)&noAlert, sizeof(float));
+    commSerial.flush(); // Ensure data is sent
+    Serial.print("Sent float: ");
+    Serial.println(noAlert, 1);
+    // Immediate receive check with retries
+    receiveData(currentTime);
     return;
   }
-
   int closestIndex = -1;
   float minDistance = 999999.0;
   for (int i = 0; i < alertCount; i++) {
@@ -501,7 +453,6 @@ void processAlerts() {
       }
     }
   }
-
   if (closestIndex >= 0) {
     Alert& alert = currentAlerts[closestIndex];
     float relativeAngle = calculateFacingDirection(alert);
@@ -513,53 +464,92 @@ void processAlerts() {
     Serial.println("  Street: " + alert.street);
     Serial.println("  Distance: " + String(minDistance, 2) + " km");
     Serial.println("  Relative Angle: " + String(relativeAngle, 1) + "° (0° is ahead)");
-    commSerial.println(String(relativeAngle, 1));
+    while (commSerial.available()) commSerial.read(); // Clear buffer
+    commSerial.write((uint8_t*)&relativeAngle, sizeof(float));
+    commSerial.flush(); // Ensure data is sent
+    Serial.print("Sent float: ");
+    Serial.println(relativeAngle, 1);
+    // Immediate receive check with retries
+    receiveData(currentTime);
   } else {
     Serial.println("No police alerts found.");
-    commSerial.println("999.0");
+    float noAlert = 999.0;
+    while (commSerial.available()) commSerial.read(); // Clear buffer
+    commSerial.write((uint8_t*)&noAlert, sizeof(float));
+    commSerial.flush(); // Ensure data is sent
+    Serial.print("Sent float: ");
+    Serial.println(noAlert, 1);
+    // Immediate receive check with retries
+    receiveData(currentTime);
   }
 }
 
-// Handles UART loopback communication
+void receiveData(unsigned long currentTime) {
+  const int maxRetries = 3;
+  for (int retry = 0; retry < maxRetries; retry++) {
+    unsigned long startTime = millis();
+    while (commSerial.available() < sizeof(float) && millis() - startTime < 100) {
+    ; // Wait for enough bytes
+  }
+    Serial.print("Receive attempt ");
+    Serial.print(retry + 1);
+    Serial.print(" - Available bytes: ");
+    Serial.println(commSerial.available());
+    if (commSerial.available() >= sizeof(float)) {
+      float receivedFloat;
+      commSerial.readBytes((uint8_t*)&receivedFloat, sizeof(receivedFloat));
+      Serial.print("Received float: ");
+      Serial.println(receivedFloat, 1);
+      if (receivedFloat <= 180.0f && receivedFloat >= -180.0f) {
+        Serial.print("Received Relative Angle (loopback): ");
+        Serial.print(receivedFloat, 1);
+        Serial.println("° (0° is ahead)");
+      } else {
+        Serial.println("No valid police alert received (loopback): 999.0");
+      }
+      lastReceivePrint = currentTime;
+      return; // Success, exit function
+    }
+    // Clear buffer before retry
+    while (commSerial.available()) commSerial.read();
+    delay(10); // Brief pause before retry
+  }
+  Serial.println("Error: No data received after retries!");
+  // Dump raw buffer for debugging
+  Serial.print("Raw buffer: ");
+  while (commSerial.available()) {
+    Serial.print(commSerial.read(), HEX);
+    Serial.print(" ");
+  }
+  Serial.println();
+}
+
 void handleCommSerial(unsigned long currentTime) {
-  if (!commSerial.available()) return;
-
-  if (currentTime - lastReceivePrint < receivePrintInterval) return;
-
-  String data = commSerial.readStringUntil('\n');
-  float relativeAngle = data.toFloat();
-  if (relativeAngle <= 180.0 && relativeAngle >= -180.0) {
-    Serial.print("Received Relative Angle (loopback): ");
-    Serial.print(relativeAngle, 1);
-    Serial.println("° (0° is ahead)");
-  } else {
-    Serial.println("No valid police alert received (loopback).");
+  // Optional: Check for stray data outside processAlerts
+  if (commSerial.available() >= sizeof(float)) {
+    receiveData(currentTime);
   }
-  lastReceivePrint = currentTime;
 }
 
-// Main Setup and Loop
 void setup() {
   Serial.begin(115200);
   Serial.println("ESP32 Loopback Test with SIM7000G is running!");
-
-  // Synchronize time for HTTPS
+  Serial.print("Sizeof float: ");
+  Serial.println(sizeof(float)); // Debug float size
   configTime(0, 0, "pool.ntp.org");
   Serial.println("Synchronizing time with NTP server...");
-
   initCommSerial();
   initWiFi();
   initGPS();
-  initHMC5883L();  // Initialize HMC5883L instead of BNO08X
+  initHMC5883L();
 }
 
 void loop() {
   unsigned long currentTime = millis();
   timeSinceLastCheck += (currentTime - lastApiCall) / 1000.0;
-
   updateGPS();
   printGPS(currentTime);
-  updateIMU(currentTime);  // Update HMC5883L data
+  updateIMU(currentTime);
   maintainWiFi();
   fetchWazeData(currentTime);
   handleCommSerial(currentTime);
