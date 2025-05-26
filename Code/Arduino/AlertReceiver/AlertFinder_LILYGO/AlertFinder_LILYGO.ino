@@ -13,6 +13,10 @@
 #define PIN_RX 26
 #define PWR_PIN 4
 
+// ESP32 Communication
+#define COMM_TX 32
+#define COMM_RX 33
+
 // Libraries
 #include <HardwareSerial.h>  // For UART communication (loopback)
 #include <TinyGsmClient.h>   // For SIM7000G modem communication
@@ -226,7 +230,7 @@ void initHMC5883L() {
 
 // Initializes UART1 for loopback communication
 void initCommSerial() {
-  commSerial.begin(9600, SERIAL_8N1, 19, 18);
+  commSerial.begin(9600, SERIAL_8N1, COMM_RX, COMM_TX);
 }
 
 // Data Processing Functions
@@ -525,11 +529,11 @@ void handleCommSerial(unsigned long currentTime) {
   String data = commSerial.readStringUntil('\n');
   float relativeAngle = data.toFloat();
   if (relativeAngle <= 180.0 && relativeAngle >= -180.0) {
-    Serial.print("Received Relative Angle: ");
+    Serial.print("Received Relative Angle (loopback): ");
     Serial.print(relativeAngle, 1);
     Serial.println("° (0° is ahead)");
   } else {
-    Serial.println("No valid police alert received.");
+    Serial.println("No valid police alert received (loopback).");
   }
   lastReceivePrint = currentTime;
 }
