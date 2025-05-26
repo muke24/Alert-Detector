@@ -1,10 +1,14 @@
 // AlertFinder_LILYGO.ino
 // This sketch uses a LILYGO T-SIM7000G to fetch police alerts from the Waze API using GPS coordinates from the SIM7000G module,
-// calculates the relative angle to the closest police alert using HMC5883L magnetometer data via I2C, and sends the angle
+// calculates the relative angle to the closest police alert using BNO08X IMU data via SPI, and sends the angle
 // via UART1 (loopback on GPIO18 TX to GPIO19 RX for testing). It prioritizes Wi-Fi for internet access,
 // falling back to cellular (GPRS via SIM7000G) if Wi-Fi is unavailable, and logs data to the Serial Monitor for debugging.
 
-// TODO: BNO08X IMU hardware was faulty, so switched from BNO08X (SPI) to HMC5883L (I2C).
+// **IMPORTANT**: For the BNO08X IMU, ensure it is set to SPI mode by connecting P0 to GND and P1 to VCC (for Adafruit breakouts).
+// Check your specific breakout’s documentation for correct mode configuration.
+// BNO08X INT pin is connected to GPIO33, and RST pin is connected to GPIO32.
+
+// TODO: BNO08X IMU hardware was faulty, so we need to switch from the BNO08X to a HMC5883L.
 
 // SIM7000G Configuration
 #define TINY_GSM_MODEM_SIM7000
@@ -15,12 +19,20 @@
 #define PIN_RX 26
 #define PWR_PIN 4
 
+// SPI Pins for BNO08X
+#define BNO08X_CS   21  // Chip Select pin for SPI
+#define BNO08X_SCK  18  // SPI Clock
+#define BNO08X_MISO 19  // SPI MISO
+#define BNO08X_MOSI 23  // SPI MOSI
+#define BNO08X_INT  33  // Interrupt pin
+#define BNO08X_RST  32  // Reset pin (changed from GPIO34 to GPIO32)
+
 // Libraries
 #include <HardwareSerial.h>  // For UART communication (loopback)
 #include <TinyGsmClient.h>   // For SIM7000G modem communication
 #include <TinyGPS++.h>       // For parsing GPS data (fallback)
-#include <Wire.h>            // For I2C communication with HMC5883L
-#include <Adafruit_HMC5883_U.h> // For HMC5883L magnetometer via I2C
+#include <SPI.h>             // For SPI communication with BNO08X
+#include <Adafruit_BNO08x.h> // For BNO08X IMU via SPI
 #include <WiFi.h>            // For Wi-Fi connectivity
 #include <HTTPClient.h>      // For HTTP requests to Waze API (Wi-Fi only)
 #include <ArduinoJson.h>     // For parsing JSON responses from Waze API
@@ -44,7 +56,7 @@ const char* basePath = "/live-map/api/georss"; // Waze API path
 
 // Timing constants
 const unsigned long printInterval = 500;         // Print GPS/IMU data every 500ms
-const unsigned long retryInterval = 5000;        // Retry HMC5883L initialization every 5 seconds
+const unsigned long retryInterval = 5000;        // Retry BNO08X initialization every 5 seconds
 const unsigned long receivePrintInterval = 1000; // Print received UART data every 1000ms
 const int maxImuFailures = 5;                    // Max consecutive IMU failures before reinitialization
 
@@ -53,19 +65,19 @@ HardwareSerial commSerial(1);  // UART1 for loopback communication (GPIO19 RX, G
 TinyGsm modem(SerialAT);       // TinyGSM modem object for SIM7000G
 TinyGsmClient gsmClient(modem); // TinyGSM client for cellular HTTP requests
 TinyGPSPlus gps;               // TinyGPS++ object for parsing GPS data (fallback)
-Adafruit_HMC5883_Unified mag = Adafruit_HMC5883_Unified(12345); // HMC5883L magnetometer object for heading data via I2C
+Adafruit_BNO08x bno08x;        // BNO08X IMU object for orientation data via SPI
 
 // State Variables
-bool bnoInitialized = false;            // Tracks HMC5883L initialization status
+bool bnoInitialized = false;            // Tracks BNO08X initialization status
 int imuFailureCount = 0;                // Counts consecutive IMU data failures
 unsigned long lastGpsPrint = 0;         // Timestamp for last GPS print
 unsigned long lastImuPrint = 0;         // Timestamp for last IMU print
-unsigned long lastBnoRetry = 0;         // Timestamp for last HMC5883L retry
+unsigned long lastBnoRetry = 0;         // Timestamp for last BNO08X retry
 unsigned long lastApiCall = 0;          // Timestamp for last Waze API call
 unsigned long lastReceivePrint = 0;     // Timestamp for last UART receive print
 float timeSinceLastCheck = 0;           // Timer for periodic API checks (seconds)
 bool isLocationInitialized = false;     // Tracks if GPS location is initialized
-float currentDirection = 0;             // Current heading from HMC5883L (degrees)
+float currentDirection = 0;             // Current IMU heading (degrees)
 bool isGprsConnected = false;           // Tracks cellular connection status
 
 // Data Structures
@@ -213,14 +225,26 @@ void initGPS() {
   modem.enableGPS();
 }
 
-// Initializes HMC5883L on I2C
-void initHMC5883L() {
-  Wire.begin(21, 22); // Initialize I2C on pins 21 (SDA) and 22 (SCL)
-  if (!mag.begin()) {
-    Serial.println("Failed to find HMC5883L. Check wiring!");
+// Initializes IMU (BNO08X) on SPI
+void initIMU() {
+  // Configure RST and INT pins
+  pinMode(BNO08X_RST, OUTPUT);
+  pinMode(BNO08X_INT, INPUT);
+  
+  // Perform reset sequence
+  digitalWrite(BNO08X_RST, LOW);
+  delay(10); // Hold low for at least 10ms
+  digitalWrite(BNO08X_RST, HIGH);
+  delay(50); // Wait for sensor to stabilize
+
+  SPI.begin(BNO08X_SCK, BNO08X_MISO, BNO08X_MOSI, BNO08X_CS);
+
+  if (!bno08x.begin_SPI(BNO08X_CS, BNO08X_INT, &SPI)) {
+    Serial.println("Failed to find BNO08X during setup. Will retry in loop...");
     bnoInitialized = false;
   } else {
-    Serial.println("HMC5883L initialized successfully!");
+    Serial.println("BNO08X initialized successfully via SPI!");
+    bno08x.enableReport(SH2_ROTATION_VECTOR);
     bnoInitialized = true;
   }
 }
@@ -277,28 +301,42 @@ void printGPS(unsigned long currentTime) {
 // Updates IMU data and handles failures
 void updateIMU(unsigned long currentTime) {
   if (!bnoInitialized && (currentTime - lastBnoRetry >= retryInterval)) {
-    initHMC5883L();
+    initIMU();
     lastBnoRetry = currentTime;
   }
 
   if (bnoInitialized && (currentTime - lastImuPrint >= printInterval)) {
-    sensors_event_t event;
-    if (mag.getEvent(&event)) {
-      float heading = atan2(event.magnetic.y, event.magnetic.x);
-      if (heading < 0) heading += 2 * PI;
-      currentDirection = heading * 180 / PI;
-      Serial.print("HMC5883L Heading: ");
-      Serial.println(currentDirection);
-      imuFailureCount = 0;
+    // Check if new data is available via INT pin (active low)
+    if (digitalRead(BNO08X_INT) == LOW) {
+      sh2_SensorValue_t sensorValue;
+      if (bno08x.getSensorEvent(&sensorValue) && sensorValue.sensorId == SH2_ROTATION_VECTOR) {
+        float q0 = sensorValue.un.rotationVector.real;
+        float q1 = sensorValue.un.rotationVector.i;
+        float q2 = sensorValue.un.rotationVector.j;
+        float q3 = sensorValue.un.rotationVector.k;
+        currentDirection = atan2(2 * (q0 * q3 + q1 * q2), 1 - 2 * (q2 * q2 + q3 * q3)) * 180.0 / PI;
+        Serial.print("IMU Yaw: "); Serial.print(currentDirection);
+        Serial.print(", Pitch: "); Serial.print(atan2(2 * (q0 * q2 - q3 * q1), 1 - 2 * (q2 * q2 + q1 * q1)) * 180.0 / PI);
+        Serial.print(", Roll: "); Serial.println(asin(2 * (q0 * q1 + q2 * q3)) * 180.0 / PI);
+        imuFailureCount = 0;
+      } else {
+        Serial.println("IMU: No data");
+        imuFailureCount++;
+      }
     } else {
-      Serial.println("HMC5883L: No data");
-      imuFailureCount++;
+      Serial.println("IMU: Waiting for interrupt");
+      return; // Skip reading if no interrupt
     }
 
     if (imuFailureCount >= maxImuFailures) {
-      Serial.println("HMC5883L appears to be disconnected. Attempting to reinitialize...");
+      Serial.println("BNO08X appears to be disconnected. Attempting to reinitialize...");
+      digitalWrite(BNO08X_RST, LOW);
+      delay(10); // Reset sensor
+      digitalWrite(BNO08X_RST, HIGH);
+      delay(50); // Wait for stabilization
       bnoInitialized = false;
       imuFailureCount = 0;
+      lastBnoRetry = 0;
     }
     lastImuPrint = currentTime;
   }
@@ -535,7 +573,7 @@ void setup() {
   initCommSerial();
   initWiFi();
   initGPS();
-  initHMC5883L();  // Initialize HMC5883L instead of BNO08X
+  initIMU();
 }
 
 void loop() {
@@ -544,7 +582,7 @@ void loop() {
 
   updateGPS();
   printGPS(currentTime);
-  updateIMU(currentTime);  // Update HMC5883L data
+  updateIMU(currentTime);
   maintainWiFi();
   fetchWazeData(currentTime);
   handleCommSerial(currentTime);
