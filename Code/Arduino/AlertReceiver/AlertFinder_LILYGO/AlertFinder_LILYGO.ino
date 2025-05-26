@@ -4,8 +4,6 @@
 // via UART1 (loopback on GPIO18 TX to GPIO19 RX for testing). It prioritizes Wi-Fi for internet access,
 // falling back to cellular (GPRS via SIM7000G) if Wi-Fi is unavailable, and logs data to the Serial Monitor for debugging.
 
-// TODO: BNO08X IMU hardware was faulty, so switched from BNO08X (SPI) to HMC5883L (I2C).
-
 // SIM7000G Configuration
 #define TINY_GSM_MODEM_SIM7000
 #define TINY_GSM_RX_BUFFER 1024 // Set RX buffer to 1Kb
@@ -22,6 +20,7 @@
 #include <Wire.h>            // For I2C communication with HMC5883L
 #include <Adafruit_HMC5883_U.h> // For HMC5883L magnetometer via I2C
 #include <WiFi.h>            // For Wi-Fi connectivity
+#include <WiFiClientSecure.h> // For secure HTTPS requests
 #include <HTTPClient.h>      // For HTTP requests to Waze API (Wi-Fi only)
 #include <ArduinoJson.h>     // For parsing JSON responses from Waze API
 
@@ -36,7 +35,7 @@ const char gprsUser[] = "";
 const char gprsPass[] = "";
 
 // Waze API settings
-const float maxDistanceKm = 1.0f;      // Max distance for alerts (kilometers)
+const float maxDistanceKm = 10.0f;      // Max distance for alerts (kilometers)
 const float checkInterval = 15.0f;     // Interval to check for new alerts (seconds)
 const float movementThreshold = 0.2f;  // Distance to trigger alert check (kilometers)
 const char* baseHost = "www.waze.com"; // Waze API host
@@ -412,10 +411,18 @@ void fetchWazeData(unsigned long currentTime) {
   String payload;
   if (WiFi.status() == WL_CONNECTED) {
     Serial.println("Using Wi-Fi for Waze API request");
+    Serial.print("Wi-Fi Status: ");
+    Serial.println(WiFi.status());
     HTTPClient http;
-    WiFiClient client;
+    WiFiClientSecure client;
+    client.setInsecure(); // Skip certificate verification for testing
     String url = "https://" + String(baseHost) + path;
-    http.begin(client, url);
+    http.setTimeout(10000); // Set 10-second timeout
+    if (!http.begin(client, url)) {
+      Serial.println("Failed to begin HTTP connection");
+      http.end();
+      return;
+    }
     int httpCode = http.GET();
     if (httpCode <= 0) {
       Serial.println("Waze API call failed, error: " + String(http.errorToString(httpCode).c_str()));
@@ -531,6 +538,10 @@ void handleCommSerial(unsigned long currentTime) {
 void setup() {
   Serial.begin(115200);
   Serial.println("ESP32 Loopback Test with SIM7000G is running!");
+
+  // Synchronize time for HTTPS
+  configTime(0, 0, "pool.ntp.org");
+  Serial.println("Synchronizing time with NTP server...");
 
   initCommSerial();
   initWiFi();
