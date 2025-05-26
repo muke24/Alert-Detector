@@ -290,7 +290,7 @@ const lv_img_dsc_t compassBackground = {
   .header.always_zero = 0,
   .header.reserved = 0,
   .header.w = 240,
-  .header.h = 130,
+  .header.h = 120,
   .data_size = 93600,
   .data = compassBackground_map,
 };

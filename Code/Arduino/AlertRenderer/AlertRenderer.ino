@@ -9,8 +9,6 @@
 #include "compassArrow.h"
 
 #define GFX_BL 8
-#define UART_RX_PIN 6 // or try 20
-#define UART_TX_PIN 7 // or try 21
 
 Arduino_DataBus *bus = new Arduino_ESP32SPI(4 /* DC */, 10 /* CS */, 1 /* SCK */, 0 /* MOSI */, GFX_NOT_DEFINED /* MISO */);
 Arduino_GFX *gfx = new Arduino_GC9A01(bus, GFX_NOT_DEFINED /* RST */, 0 /* rotation */, true /* IPS */);
@@ -23,7 +21,7 @@ Encoder myEnc(ROTARY_ENCODER_A_PIN, ROTARY_ENCODER_B_PIN);
 Bounce2::Button button = Bounce2::Button();
 
 // UART for communication with LILYGO
-HardwareSerial SerialUART(1); // UART1
+HardwareSerial SerialUART(2); // UART2
 float currentAngle = 0; // Global angle from LILYGO
 
 /* Screen resolution */
@@ -79,6 +77,10 @@ void lv_example_page(void) {
   lv_style_set_bg_color(&style_screen, lv_color_black());
   lv_obj_add_style(scr, &style_screen, 0);
 
+  // TODO: 
+  // - MAKE EVERYTHING ROTATED -90 DEGREES (hardware is offset by -90 degrees so we need to fix this in software)
+  // - ROTATE ARROW IMAGE IN REALTIME USING THE RECEIVED FLOAT FROM UART RX.
+
   /* Background image */
   lv_obj_t *img_bg = lv_img_create(scr);
   lv_img_set_src(img_bg, &compassBackground);
@@ -98,7 +100,7 @@ void lv_example_page(void) {
 
 void setup() {
   Serial.begin(115200);
-  SerialUART.begin(115200, SERIAL_8N1, UART_RX_PIN, UART_TX_PIN);
+  SerialUART.begin(115200, SERIAL_8N2);
   Serial.println("Setup started");
 
 #ifdef GFX_BL
