@@ -1,8 +1,6 @@
 LILYGO T-SIM7000G Pinout
 
-
 Left side:
-
        |        |       | 3V3
        |        |       | GND
 Pin 32 | GPIO32 | ADC04 | TOUCH9
@@ -17,9 +15,7 @@ Pin 13 | GPIO13 | ADC14 | TOUCH4
 Pin 12 | GPIO12 | ADC15 | TOUCH5
        |        |       | VBAT
 
-
 Right side:
-
 Pin 1  | GPIO01 |       | Serial TX
 Pin 3  | GPIO03 |       | Serial RX
 Pin 22 | GPIO22 |       | Wire_SCL
