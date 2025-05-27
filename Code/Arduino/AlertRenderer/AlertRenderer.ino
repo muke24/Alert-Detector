@@ -13,6 +13,7 @@
 #define ADC_PIN 3 // GPIO03
 #define RX_PIN 20  // GPIO20 RX
 #define TX_PIN 21  // GPIO21 TX
+#define UART_RECIEVE 0 // UART 0, 1 or 2 // USE UART 0 WITH A 10 PIN FPC EXTENSION BOARD. PIN 1: VCC, PIN 2: GND, PIN 6: RX, PIN 7: TX
 
 #define GFX_BL 8
 
@@ -27,7 +28,7 @@ Encoder myEnc(ROTARY_ENCODER_A_PIN, ROTARY_ENCODER_B_PIN);
 Bounce2::Button button = Bounce2::Button();
 
 // UART for communication with LILYGO
-HardwareSerial SerialUART(0); // UART1
+HardwareSerial SerialUART(UART_RECIEVE);
 float currentAngle = 999.0; // Global angle from LILYGO, initialized to sentinel value
 
 /* Screen resolution */
