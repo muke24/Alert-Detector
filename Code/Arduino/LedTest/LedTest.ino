@@ -6,7 +6,7 @@
 CRGB leds[NUM_LEDS];
 
 // Define strip indices for each row based on your custom indexing
-int row1[] = {0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11};               // Row 1: LEDs 1 to 12
+int row1[] = {0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11};              // Row 1: LEDs 1 to 12
 int row2[] = {23, 22, 21, 20, 19, 18, 17, 16, 15, 14, 13, 12};    // Row 2: LEDs 13 to 24
 int row3[] = {24, 25, 26, 27, 28, 29, 30, 31, 32, 33, 34};        // Row 3: LEDs 25 to 35
 int row4[] = {45, 44, 43, 42, 41, 40, 39, 38, 37, 36, 35};        // Row 4: LEDs 36 to 46

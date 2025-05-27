@@ -1,8 +1,7 @@
 // AlertFinder_LILYGO.ino
-// This sketch uses a LILYGO T-SIM7000G to fetch police alerts from the Waze API using GPS coordinates from the SIM7000G module,
-// calculates the relative angle to the closest police alert using HMC5883L magnetometer data via I2C, and sends the angle
-// via UART2 (loopback on GPIO32 TX to GPIO33 RX for testing). It prioritizes Wi-Fi for internet access,
-// falling back to cellular (GPRS via SIM7000G) if Wi-Fi is unavailable, and logs data to the Serial Monitor for debugging.
+// This sketch uses a LILYGO T-SIM7000G to fetch police alerts from the Waze API using GPS coordinates,
+// calculates the relative angle to the closest police alert using HMC5883L magnetometer data,
+// sends the angle via UART2, and animates a WS2812B LED strip based on alert distance using a separate FreeRTOS task.
 
 // SIM7000G Configuration
 #define TINY_GSM_MODEM_SIM7000
@@ -16,43 +15,65 @@
 // ESP32 Communication
 #define COMM_TX 32
 #define COMM_RX 33
-// Alternative pins for testing (uncomment to use)
-// #define COMM_TX 16
-// #define COMM_RX 17
+
+// LED Strip Configuration
+#define LED_PIN 14    // GPIO14 on LILYGO ESP32
+#define NUM_LEDS 46   // Total number of LEDs
 
 // Libraries
-#include <HardwareSerial.h>  // For UART communication (loopback)
-#include <TinyGsmClient.h>   // For SIM7000G modem communication
-#include <TinyGPS++.h>       // For parsing GPS data (fallback)
-#include <Wire.h>            // For I2C communication with HMC5883L
-#include <Adafruit_HMC5883_U.h> // For HMC5883L magnetometer via I2C
-#include <WiFi.h>            // For Wi-Fi connectivity
-#include <WiFiClientSecure.h> // For secure HTTPS requests
-#include <HTTPClient.h>      // For HTTP requests to Waze API (Wi-Fi only)
-#include <ArduinoJson.h>     // For parsing JSON responses from Waze API
+#include <HardwareSerial.h>     // For UART communication
+#include <TinyGsmClient.h>      // For SIM7000G modem
+#include <TinyGPS++.h>          // For parsing GPS data
+#include <Wire.h>               // For I2C with HMC5883L
+#include <Adafruit_HMC5883_U.h> // For HMC5883L magnetometer
+#include <WiFi.h>               // For Wi-Fi connectivity
+#include <WiFiClientSecure.h>   // For secure HTTPS requests
+#include <HTTPClient.h>         // For HTTP requests to Waze API
+#include <ArduinoJson.h>        // For parsing JSON responses
+#include <FastLED.h>            // For WS2812B LED strip control
+#include <freertos/FreeRTOS.h>  // For FreeRTOS tasks
+#include <freertos/task.h>      // For task management
 
 // Configuration Constants
 const char* ssid = "BigCock69";     // Replace with your Wi-Fi SSID
 const char* password = "GymBro69";  // Replace with your Wi-Fi password
-const char apn[] = ""; // SET TO YOUR APN
+const char apn[] = "";              // SET TO YOUR APN
 const char gprsUser[] = "";
 const char gprsPass[] = "";
 const float maxDistanceKm = 15.0f;      // Max distance for alerts (kilometers)
-const float checkInterval = 15.0f;     // Interval to check for new alerts (seconds)
-const float movementThreshold = 0.2f;  // Distance to trigger alert check (kilometers)
-const char* baseHost = "www.waze.com"; // Waze API host
+const float checkInterval = 15.0f;      // Interval to check for new alerts (seconds)
+const float movementThreshold = 0.2f;   // Distance to trigger alert check (kilometers)
+const char* baseHost = "www.waze.com";  // Waze API host
 const char* basePath = "/live-map/api/georss"; // Waze API path
 const unsigned long printInterval = 500;         // Print GPS/IMU data every 500ms
-const unsigned long retryInterval = 5000;        // Retry HMC5883L initialization every 5 seconds
+const unsigned long retryInterval = 5000;        // Retry HMC5883L initialization every 5s
 const unsigned long receivePrintInterval = 1000; // Print received UART data every 1000ms
-const int maxImuFailures = 5;                    // Max consecutive IMU failures before reinitialization
+const unsigned long ledUpdateInterval = 50;      // Update LEDs every 50ms
+const int maxImuFailures = 5;                    // Max consecutive IMU failures
 
 // Hardware Objects
-HardwareSerial commSerial(2);  // UART1 for loopback communication
-TinyGsm modem(SerialAT);       // TinyGSM modem object for SIM7000G
-TinyGsmClient gsmClient(modem); // TinyGSM client for cellular HTTP requests
-TinyGPSPlus gps;               // TinyGPS++ object for parsing GPS data (fallback)
-Adafruit_HMC5883_Unified mag = Adafruit_HMC5883_Unified(12345); // HMC5883L magnetometer object for heading data via I2C
+HardwareSerial commSerial(2);  // UART2 for communication
+TinyGsm modem(SerialAT);       // TinyGSM modem object
+TinyGsmClient gsmClient(modem); // TinyGSM client
+TinyGPSPlus gps;               // TinyGPS++ object
+Adafruit_HMC5883_Unified mag = Adafruit_HMC5883_Unified(12345); // HMC5883L magnetometer
+CRGB leds[NUM_LEDS];           // LED strip array
+
+// LED Row Definitions
+int row1[] = {0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11};              // Row 1: LEDs 1 to 12
+int row2[] = {23, 22, 21, 20, 19, 18, 17, 16, 15, 14, 13, 12};    // Row 2: LEDs 13 to 24
+int row3[] = {24, 25, 26, 27, 28, 29, 30, 31, 32, 33, 34};        // Row 3: LEDs 25 to 35
+int row4[] = {45, 44, 43, 42, 41, 40, 39, 38, 37, 36, 35};        // Row 4: LEDs 36 to 46
+
+// Number of LEDs in Each Row
+const int num_leds_row1 = 12;
+const int num_leds_row2 = 12;
+const int num_leds_row3 = 11;
+const int num_leds_row4 = 11;
+
+// LED Color and Multiplier
+CRGB color = CRGB(128, 255, 0); // R:128, G:255, B:0 (lime green)
+volatile float multiplier = 1.0f; // Animation speed multiplier (1.0 to 2.0), volatile for task safety
 
 // State Variables
 bool bnoInitialized = false;
@@ -66,6 +87,8 @@ float timeSinceLastCheck = 0;
 bool isLocationInitialized = false;
 float currentDirection = 0;
 bool isGprsConnected = false;
+volatile int alertCount = 0; // Volatile for task safety
+volatile int closestIndex = -1; // Volatile for task safety
 
 // Data Structures
 struct Location {
@@ -82,13 +105,12 @@ struct Alert {
   String street;
 };
 Alert* currentAlerts = nullptr;
-int alertCount = 0;
 
 struct BoundingArea {
-  float top;
-  float bottom;
   float left;
+  float bottom;
   float right;
+  float top;
 };
 
 // Utility Functions
@@ -113,7 +135,7 @@ float calculateDistance(Location loc1, Location loc2) {
   float dLon = lon2 - lon1;
   float a = sin(dLat / 2) * sin(dLat / 2) + cos(lat1) * cos(lat2) * sin(dLon / 2) * sin(dLon / 2);
   float c = 2 * atan2(sqrt(a), sqrt(1 - a));
-  return 6371.0 * c;
+  return 6371.0 * c; // Distance in kilometers
 }
 
 float calculateAngle(Location from, Location to) {
@@ -137,6 +159,13 @@ float calculateFacingDirection(Alert alert) {
   float rawAngle = calculateAngle(currentLocation, alert.location);
   float relativeAngle = rawAngle - currentDirection;
   return normalizeAngle(relativeAngle);
+}
+
+float calculateMultiplier(float distance) {
+  if (distance >= maxDistanceKm) return 1.0f;
+  if (distance <= 0) return 2.0f;
+  // Linear interpolation between 2.0 (at 0 km) and 1.0 (at maxDistanceKm)
+  return 2.0f - (distance / maxDistanceKm);
 }
 
 // Hardware Initialization Functions
@@ -195,7 +224,7 @@ void initGPS() {
 }
 
 void initHMC5883L() {
-  Wire.begin(21, 22);
+  Wire.begin(21, 22); // SDA=21, SCL=22 on LILYGO ESP32
   if (!mag.begin()) {
     Serial.println("Failed to find HMC5883L. Check wiring!");
     bnoInitialized = false;
@@ -207,12 +236,11 @@ void initHMC5883L() {
 
 void initCommSerial() {
   commSerial.begin(115200, SERIAL_8N1, COMM_RX, COMM_TX);
-  Serial.print("UART1 initialized for loopback: GPIO");
+  Serial.print("UART2 initialized: GPIO");
   Serial.print(COMM_TX);
   Serial.print(" (TX) to GPIO");
   Serial.print(COMM_RX);
   Serial.println(" (RX)");
-  // Clear any stale data
   while (commSerial.available()) commSerial.read();
 }
 
@@ -274,7 +302,7 @@ void updateIMU(unsigned long currentTime) {
       imuFailureCount++;
     }
     if (imuFailureCount >= maxImuFailures) {
-      Serial.println("HMC5883L appears to be disconnected. Attempting to reinitialize...");
+      Serial.println("HMC5883L disconnected. Attempting to reinitialize...");
       bnoInitialized = false;
       imuFailureCount = 0;
     }
@@ -367,11 +395,9 @@ void fetchWazeData(unsigned long currentTime) {
   String payload;
   if (WiFi.status() == WL_CONNECTED) {
     Serial.println("Using Wi-Fi for Waze API request");
-    Serial.print("Wi-Fi Status: ");
-    Serial.println(WiFi.status());
     HTTPClient http;
     WiFiClientSecure client;
-    client.setInsecure();
+    client.setInsecure(); // Note: For production, use proper certificates
     String url = "https://" + String(baseHost) + path;
     http.setTimeout(10000);
     if (!http.begin(client, url)) {
@@ -433,16 +459,16 @@ void processAlerts(unsigned long currentTime) {
   if (alertCount == 0 || !bnoInitialized) {
     Serial.println("No alerts found or IMU not initialized.");
     float noAlert = 999.0;
-    while (commSerial.available()) commSerial.read(); // Clear buffer
+    while (commSerial.available()) commSerial.read();
     commSerial.write((uint8_t*)&noAlert, sizeof(float));
-    commSerial.flush(); // Ensure data is sent
+    commSerial.flush();
     Serial.print("Sent float: ");
     Serial.println(noAlert, 1);
-    // Immediate receive check with retries
+    closestIndex = -1;
     receiveData(currentTime);
     return;
   }
-  int closestIndex = -1;
+  closestIndex = -1;
   float minDistance = 999999.0;
   for (int i = 0; i < alertCount; i++) {
     if (currentAlerts[i].type == "POLICE") {
@@ -456,6 +482,7 @@ void processAlerts(unsigned long currentTime) {
   if (closestIndex >= 0) {
     Alert& alert = currentAlerts[closestIndex];
     float relativeAngle = calculateFacingDirection(alert);
+    multiplier = calculateMultiplier(minDistance);
     Serial.println("Closest Police Alert:");
     Serial.println("  Type: " + alert.type);
     Serial.println("  Subtype: " + alert.subtype);
@@ -464,22 +491,22 @@ void processAlerts(unsigned long currentTime) {
     Serial.println("  Street: " + alert.street);
     Serial.println("  Distance: " + String(minDistance, 2) + " km");
     Serial.println("  Relative Angle: " + String(relativeAngle, 1) + "° (0° is ahead)");
-    while (commSerial.available()) commSerial.read(); // Clear buffer
+    Serial.println("  LED Multiplier: " + String(multiplier, 2));
+    while (commSerial.available()) commSerial.read();
     commSerial.write((uint8_t*)&relativeAngle, sizeof(float));
-    commSerial.flush(); // Ensure data is sent
+    commSerial.flush();
     Serial.print("Sent float: ");
     Serial.println(relativeAngle, 1);
-    // Immediate receive check with retries
     receiveData(currentTime);
   } else {
     Serial.println("No police alerts found.");
     float noAlert = 999.0;
-    while (commSerial.available()) commSerial.read(); // Clear buffer
+    while (commSerial.available()) commSerial.read();
     commSerial.write((uint8_t*)&noAlert, sizeof(float));
-    commSerial.flush(); // Ensure data is sent
+    commSerial.flush();
     Serial.print("Sent float: ");
     Serial.println(noAlert, 1);
-    // Immediate receive check with retries
+    closestIndex = -1;
     receiveData(currentTime);
   }
 }
@@ -489,59 +516,92 @@ void receiveData(unsigned long currentTime) {
   for (int retry = 0; retry < maxRetries; retry++) {
     unsigned long startTime = millis();
     while (commSerial.available() < sizeof(float) && millis() - startTime < 100) {
-    ; // Wait for enough bytes
-  }
-    Serial.print("Receive attempt ");
-    Serial.print(retry + 1);
-    Serial.print(" - Available bytes: ");
-    Serial.println(commSerial.available());
+      ;
+    }
     if (commSerial.available() >= sizeof(float)) {
       float receivedFloat;
       commSerial.readBytes((uint8_t*)&receivedFloat, sizeof(receivedFloat));
-      Serial.print("Received float: ");
-      Serial.println(receivedFloat, 1);
-      if (receivedFloat <= 180.0f && receivedFloat >= -180.0f) {
-        Serial.print("Received Relative Angle (loopback): ");
-        Serial.print(receivedFloat, 1);
-        Serial.println("° (0° is ahead)");
-      } else {
-        Serial.println("No valid police alert received (loopback): 999.0");
+      if (currentTime - lastReceivePrint >= receivePrintInterval) {
+        Serial.print("Received float: ");
+        Serial.println(receivedFloat, 1);
+        if (receivedFloat <= 180.0f && receivedFloat >= -180.0f) {
+          Serial.print("Received Relative Angle: ");
+          Serial.print(receivedFloat, 1);
+          Serial.println("° (0° is ahead)");
+        } else {
+          Serial.println("No valid police alert received: 999.0");
+        }
+        lastReceivePrint = currentTime;
       }
-      lastReceivePrint = currentTime;
-      return; // Success, exit function
+      return;
     }
-    // Clear buffer before retry
     while (commSerial.available()) commSerial.read();
-    delay(10); // Brief pause before retry
+    delay(10);
   }
-  Serial.println("Error: No data received after retries!");
-  // Dump raw buffer for debugging
-  Serial.print("Raw buffer: ");
-  while (commSerial.available()) {
-    Serial.print(commSerial.read(), HEX);
-    Serial.print(" ");
+  if (currentTime - lastReceivePrint >= receivePrintInterval) {
+    Serial.println("Error: No data received after retries!");
+    lastReceivePrint = currentTime;
   }
-  Serial.println();
 }
 
 void handleCommSerial(unsigned long currentTime) {
-  // Optional: Check for stray data outside processAlerts
   if (commSerial.available() >= sizeof(float)) {
     receiveData(currentTime);
   }
 }
 
+// LED Animation Task
+void ledTask(void *pvParameters) {
+  unsigned long lastLedUpdate = 0;
+  while (1) {
+    unsigned long currentTime = millis();
+    if (currentTime - lastLedUpdate >= ledUpdateInterval) {
+      lastLedUpdate = currentTime;
+      if (alertCount > 0 && closestIndex >= 0) {
+        float period = 1000.0 * multiplier; // Period in ms, adjusted by multiplier
+        float elapsed = fmod(currentTime, period);
+        float fraction = elapsed / period;
+        FastLED.clear();
+        for (int i = 0; i < num_leds_row1; i++) {
+          if (i < fraction * num_leds_row1) leds[row1[i]] = color;
+        }
+        for (int i = 0; i < num_leds_row2; i++) {
+          if (i < fraction * num_leds_row2) leds[row2[i]] = color;
+        }
+        for (int i = 0; i < num_leds_row3; i++) {
+          if (i < fraction * num_leds_row3) leds[row3[i]] = color;
+        }
+        for (int i = 0; i < num_leds_row4; i++) {
+          if (i < fraction * num_leds_row4) leds[row4[i]] = color;
+        }
+        FastLED.show();
+      } else {
+        FastLED.clear();
+        FastLED.show();
+      }
+    }
+    vTaskDelay(pdMS_TO_TICKS(10)); // Yield control for 10ms
+  }
+}
+
 void setup() {
   Serial.begin(115200);
-  Serial.println("ESP32 Loopback Test with SIM7000G is running!");
-  Serial.print("Sizeof float: ");
-  Serial.println(sizeof(float)); // Debug float size
-  configTime(0, 0, "pool.ntp.org");
-  Serial.println("Synchronizing time with NTP server...");
+  Serial.println("AlertFinder_LILYGO starting...");
   initCommSerial();
   initWiFi();
   initGPS();
   initHMC5883L();
+  FastLED.addLeds<WS2812B, LED_PIN, GRB>(leds, NUM_LEDS); // Initialize LED strip
+  // Create LED task on core 0
+  xTaskCreatePinnedToCore(
+    ledTask,     // Task function
+    "LED Task",  // Task name
+    10000,       // Stack size in words
+    NULL,        // Parameters
+    1,           // Priority
+    NULL,        // Task handle
+    0            // Core 0
+  );
 }
 
 void loop() {
