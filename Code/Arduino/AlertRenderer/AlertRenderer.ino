@@ -27,7 +27,7 @@ Encoder myEnc(ROTARY_ENCODER_A_PIN, ROTARY_ENCODER_B_PIN);
 Bounce2::Button button = Bounce2::Button();
 
 // UART for communication with LILYGO
-HardwareSerial SerialUART(1); // UART1
+HardwareSerial SerialUART(0); // UART1
 float currentAngle = 999.0; // Global angle from LILYGO, initialized to sentinel value
 
 /* Screen resolution */
@@ -130,7 +130,7 @@ void lv_example_page(void) {
 void setup() {
   Serial.begin(115200);
   // Initialize UART1 with default pins (GPIO20 RX, GPIO21 TX) to match LILYGO's 115200 baud, 8N1
-  SerialUART.begin(115200, SERIAL_8N1, RX_PIN, TX_PIN);
+  SerialUART.begin(115200, SERIAL_8N1/*, RX_PIN, TX_PIN*/);
   Serial.println("Setup started");
 
 #ifdef GFX_BL
