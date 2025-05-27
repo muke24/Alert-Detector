@@ -2,6 +2,7 @@
 // This sketch uses a LILYGO T-SIM7000G to fetch police alerts from the Waze API using GPS coordinates,
 // calculates the relative angle to the closest police alert using HMC5883L magnetometer data,
 // sends the angle via UART2, and animates a WS2812B LED strip based on alert distance using a separate FreeRTOS task.
+// Now includes custom sound playback via an Adafruit STEMMA Speaker connected to GPIO25.
 
 // SIM7000G Configuration
 #define TINY_GSM_MODEM_SIM7000
@@ -20,6 +21,9 @@
 #define LED_PIN 14    // GPIO14 on LILYGO ESP32
 #define NUM_LEDS 46   // Total number of LEDs
 
+// Speaker Configuration
+#define SPEAKER_PIN 25 // GPIO25 for Adafruit STEMMA Speaker signal (DAC1)
+
 // Libraries
 #include <HardwareSerial.h>     // For UART communication
 #include <TinyGsmClient.h>      // For SIM7000G modem
@@ -33,6 +37,10 @@
 #include <FastLED.h>            // For WS2812B LED strip control
 #include <freertos/FreeRTOS.h>  // For FreeRTOS tasks
 #include <freertos/task.h>      // For task management
+#include <AudioFileSourcePROGMEM.h> // For playing audio from PROGMEM
+#include <AudioGeneratorWAV.h>      // For WAV file playback
+#include <AudioOutputI2S.h>         // For audio output to DAC
+#include "alert_wav.h"              // Include the custom sound file byte array
 
 // Configuration Constants
 const char* ssid = "BigCock69";     // Replace with your Wi-Fi SSID
@@ -40,8 +48,8 @@ const char* password = "GymBro69";  // Replace with your Wi-Fi password
 const char apn[] = "";              // SET TO YOUR APN
 const char gprsUser[] = "";
 const char gprsPass[] = "";
-const float maxDistanceKm = 15.0f;      // Max distance for alerts (kilometers)
-const float checkInterval = 15.0f;      // Interval to check for new alerts (seconds)
+const float maxDistanceKm = 5.0f;      // Max distance for alerts (kilometers)
+const float checkInterval = 60.0f;      // Interval to check for new alerts (seconds)
 const float movementThreshold = 0.2f;   // Distance to trigger alert check (kilometers)
 const char* baseHost = "www.waze.com";  // Waze API host
 const char* basePath = "/live-map/api/georss"; // Waze API path
@@ -58,6 +66,11 @@ TinyGsmClient gsmClient(modem); // TinyGSM client
 TinyGPSPlus gps;               // TinyGPS++ object
 Adafruit_HMC5883_Unified mag = Adafruit_HMC5883_Unified(12345); // HMC5883L magnetometer
 CRGB leds[NUM_LEDS];           // LED strip array
+
+// Audio Objects
+AudioGeneratorWAV *wav = nullptr;
+AudioFileSourcePROGMEM *file = nullptr;
+AudioOutputI2S *out = nullptr;
 
 // LED Row Definitions
 int row1[] = {0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11};              // Row 1: LEDs 1 to 12
@@ -89,6 +102,7 @@ float currentDirection = 0;
 bool isGprsConnected = false;
 volatile int alertCount = 0; // Volatile for task safety
 volatile int closestIndex = -1; // Volatile for task safety
+volatile bool playSound = false; // Flag to trigger sound in main loop
 
 // Data Structures
 struct Location {
@@ -560,6 +574,11 @@ void ledTask(void *pvParameters) {
       if (alertCount > 0 && closestIndex >= 0) {
         float period = 1000.0 * multiplier; // Period in ms, adjusted by multiplier
         float elapsed = fmod(currentTime, period);
+        static float prevElapsed = 0;
+        if (elapsed < prevElapsed) {
+          playSound = true; // Signal to play sound at cycle start
+        }
+        prevElapsed = elapsed;
         float fraction = elapsed / period;
         FastLED.clear();
         for (int i = 0; i < num_leds_row1; i++) {
@@ -592,6 +611,12 @@ void setup() {
   initGPS();
   initHMC5883L();
   FastLED.addLeds<WS2812B, LED_PIN, GRB>(leds, NUM_LEDS); // Initialize LED strip
+
+  // Initialize audio output to DAC on GPIO25
+  out = new AudioOutputI2S();
+  out->SetPinout(0, 0, SPEAKER_PIN); // Use DAC on GPIO25
+  out->SetGain(0.5); // Set volume (0.0 to 1.0)
+
   // Create LED task on core 0
   xTaskCreatePinnedToCore(
     ledTask,     // Task function
@@ -613,4 +638,27 @@ void loop() {
   maintainWiFi();
   fetchWazeData(currentTime);
   handleCommSerial(currentTime);
+
+  // Handle audio playback
+  if (playSound && (wav == nullptr || !wav->isRunning())) {
+    if (wav != nullptr) {
+      wav->stop();
+      delete wav;
+      delete file;
+    }
+    file = new AudioFileSourcePROGMEM(alert_wav, alert_wav_len);
+    wav = new AudioGeneratorWAV();
+    wav->begin(file, out);
+    playSound = false;
+  }
+
+  if (wav != nullptr && wav->isRunning()) {
+    if (!wav->loop()) {
+      wav->stop();
+      delete wav;
+      delete file;
+      wav = nullptr;
+      file = nullptr;
+    }
+  }
 }
