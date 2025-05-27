@@ -1,3 +1,4 @@
+// AlertRenderer.ino
 #include <Arduino_GFX_Library.h>
 #include <lvgl.h>
 #include "freertos/FreeRTOS.h"
@@ -7,6 +8,11 @@
 #include <HardwareSerial.h>
 #include "compassBackground.h"
 #include "compassArrow.h"
+
+// Pinout for this Viewe 1.28inch ESP32C3 push knob display module.
+#define ADC_PIN 3 // GPIO03
+#define RX_PIN 20  // GPIO20 RX
+#define TX_PIN 21  // GPIO21 TX
 
 #define GFX_BL 8
 
@@ -21,8 +27,8 @@ Encoder myEnc(ROTARY_ENCODER_A_PIN, ROTARY_ENCODER_B_PIN);
 Bounce2::Button button = Bounce2::Button();
 
 // UART for communication with LILYGO
-HardwareSerial SerialUART(2); // UART2
-float currentAngle = 0; // Global angle from LILYGO
+HardwareSerial SerialUART(1); // UART1
+float currentAngle = 999.0; // Global angle from LILYGO, initialized to sentinel value
 
 /* Screen resolution */
 static uint32_t screenWidth = 240;
@@ -38,6 +44,8 @@ static int32_t last_encoder_value = 0;
 
 /* Arrow object */
 static lv_obj_t *img_arrow;
+// Direction Text
+static lv_obj_t *directionTxt;
 
 /* Display flushing */
 void my_disp_flush(lv_disp_drv_t *disp, const lv_area_t *area, lv_color_t *color_p) {
@@ -62,8 +70,19 @@ static void my_encoder_read(lv_indev_drv_t *indev_drv, lv_indev_data_t *data) {
 
 /* Update arrow angle */
 void update_arrow(lv_timer_t *timer) {
-  if (currentAngle >= 0) {
-    lv_img_set_angle(img_arrow, (int)(currentAngle * 10)); // LVGL uses 0.1 degree units
+  if (currentAngle >= -180.0 && currentAngle <= 180.0) { // Valid angle range
+    float adjustedAngle = currentAngle;
+    while (adjustedAngle < -180.0) adjustedAngle += 360.0; // Normalize to [-180, 180]
+    while (adjustedAngle > 180.0) adjustedAngle -= 360.0;
+    lv_img_set_angle(img_arrow, (int)(adjustedAngle * 10)); // LVGL uses 0.1 degree units
+    lv_obj_clear_flag(img_arrow, LV_OBJ_FLAG_HIDDEN); // Show arrow
+    char angleStr[16]; // Buffer for string conversion
+    snprintf(angleStr, sizeof(angleStr), "%.1f", adjustedAngle); // Convert float to string
+    lv_label_set_text(directionTxt, angleStr); // Update label with angle
+  } else {
+    lv_img_set_angle(img_arrow, 0); // Reset to 0 if no valid alert
+    lv_obj_add_flag(img_arrow, LV_OBJ_FLAG_HIDDEN); // Hide arrow
+    lv_label_set_text(directionTxt, "No Data"); // Update label to indicate no data
   }
 }
 
@@ -77,15 +96,11 @@ void lv_example_page(void) {
   lv_style_set_bg_color(&style_screen, lv_color_black());
   lv_obj_add_style(scr, &style_screen, 0);
 
-  // TODO: 
-  // - MAKE EVERYTHING ROTATED -90 DEGREES (hardware is offset by -90 degrees so we need to fix this in software)
-  // - ROTATE ARROW IMAGE IN REALTIME USING THE RECEIVED FLOAT FROM UART RX.
-
   /* Background image */
   lv_obj_t *img_bg = lv_img_create(scr);
   lv_img_set_src(img_bg, &compassBackground);
   lv_obj_set_size(img_bg, screenWidth, screenHeight / 2);
-  lv_obj_align(img_bg, LV_ALIGN_CENTER, 0, 0);
+  lv_obj_align(img_bg, LV_ALIGN_TOP_LEFT, 0, 0);
   lv_obj_set_style_img_recolor(img_bg, lv_color_make(128, 255, 0), 0);
   lv_obj_set_style_img_recolor_opa(img_bg, 1, 0);
 
@@ -93,14 +108,29 @@ void lv_example_page(void) {
   img_arrow = lv_img_create(scr);
   lv_img_set_src(img_arrow, &compassArrow);
   lv_img_set_pivot(img_arrow, 42, 120);
-  lv_obj_align(img_arrow, LV_ALIGN_CENTER, 0, 0);
+  lv_obj_align(img_arrow, LV_ALIGN_TOP_MID, 0, 0);
   lv_obj_set_style_img_recolor(img_arrow, lv_color_make(128, 255, 0), 0);
   lv_obj_set_style_img_recolor_opa(img_arrow, 1, 0);
+  if (currentAngle < -180.0 || currentAngle > 180.0) {
+    lv_obj_add_flag(img_arrow, LV_OBJ_FLAG_HIDDEN); // Hide arrow initially if no valid data
+  }
+
+  /* Direction text label */
+  directionTxt = lv_label_create(scr); // Ensure directionTxt is initialized
+  char angleStr[16]; // Buffer for string conversion
+  if (currentAngle >= -180.0 && currentAngle <= 180.0) {
+    snprintf(angleStr, sizeof(angleStr), "%.1f", currentAngle); // Convert float to string
+    lv_label_set_text(directionTxt, angleStr);
+  } else {
+    lv_label_set_text(directionTxt, "No Data");
+  }
+  lv_obj_align(directionTxt, LV_ALIGN_CENTER, 0, 0);
 }
 
 void setup() {
   Serial.begin(115200);
-  SerialUART.begin(115200, SERIAL_8N2);
+  // Initialize UART1 with default pins (GPIO20 RX, GPIO21 TX) to match LILYGO's 115200 baud, 8N1
+  SerialUART.begin(115200, SERIAL_8N1, RX_PIN, TX_PIN);
   Serial.println("Setup started");
 
 #ifdef GFX_BL
@@ -167,21 +197,28 @@ void setup() {
 }
 
 void loop() {
-  // Empty, as tasks handle everything
+
 }
 
 /* UART task to read angle from LILYGO */
 void uartTask(void *pvParameters) {
   while (true) {
-    if (SerialUART.available()) {
-      String data = SerialUART.readStringUntil('\n');
-      float relativeAngle = data.toFloat();
-      Serial.print("Relative Angle: ");
-      Serial.print(String(relativeAngle)); // Debug anything which was received.
-      currentAngle = relativeAngle;
+    if (SerialUART.available() >= sizeof(float)) { // Check if at least 4 bytes are available
+      float relativeAngle;
+      SerialUART.readBytes((uint8_t*)&relativeAngle, sizeof(float)); // Read 4 bytes into float
+      Serial.print("Received Relative Angle: ");
+      Serial.print(relativeAngle, 1); // Print angle with 1 decimal place for debugging
+      Serial.println("° (0° is ahead)");
       
+      // Validate angle (LILYGO sends 999.0 for no alert)
+      if (relativeAngle >= -180.0 && relativeAngle <= 180.0) {
+        currentAngle = relativeAngle; // Update global angle for valid values
+      } else {
+        currentAngle = 999.0; // Set to sentinel value for invalid/no alert
+        Serial.println("No valid police alert received (sentinel value).");
+      }
     }
-    vTaskDelay(pdMS_TO_TICKS(100));
+    vTaskDelay(pdMS_TO_TICKS(100)); // Delay 100ms between checks
   }
 }
 
