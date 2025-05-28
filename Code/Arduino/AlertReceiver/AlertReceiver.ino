@@ -2,7 +2,7 @@
 // This sketch uses a LILYGO T-SIM7000G to fetch police alerts from the Waze API using GPS coordinates,
 // calculates the relative angle to the closest police alert using HMC5883L magnetometer data,
 // sends the angle via UART2, and animates a WS2812B LED strip based on alert distance using a separate FreeRTOS task.
-// Now includes custom sound playback via an Adafruit STEMMA Speaker connected to GPIO25.
+// Audio playback is now handled by a dedicated task on core 1 via an Adafruit STEMMA Speaker connected to GPIO25.
 
 // SIM7000G Configuration
 #define TINY_GSM_MODEM_SIM7000
@@ -102,7 +102,7 @@ float currentDirection = 0;
 bool isGprsConnected = false;
 volatile int alertCount = 0; // Volatile for task safety
 volatile int closestIndex = -1; // Volatile for task safety
-volatile bool playSound = false; // Flag to trigger sound in main loop
+volatile bool playSound = false; // Flag to trigger sound in audio task
 
 // Data Structures
 struct Location {
@@ -603,6 +603,35 @@ void ledTask(void *pvParameters) {
   }
 }
 
+// Audio Task
+void audioTask(void *pvParameters) {
+  while (1) {
+    if (playSound) {
+      if (wav == nullptr || !wav->isRunning()) {
+        if (wav != nullptr) {
+          wav->stop();
+          delete wav;
+          delete file;
+        }
+        file = new AudioFileSourcePROGMEM(alert_wav, alert_wav_len);
+        wav = new AudioGeneratorWAV();
+        wav->begin(file, out);
+        playSound = false; // Reset flag after starting playback
+      }
+    }
+    if (wav != nullptr && wav->isRunning()) {
+      if (!wav->loop()) {
+        wav->stop();
+        delete wav;
+        delete file;
+        wav = nullptr;
+        file = nullptr;
+      }
+    }
+    vTaskDelay(pdMS_TO_TICKS(1)); // Yield control frequently for smooth playback
+  }
+}
+
 void setup() {
   Serial.begin(115200);
   Serial.println("AlertFinder_LILYGO starting...");
@@ -627,6 +656,17 @@ void setup() {
     NULL,        // Task handle
     0            // Core 0
   );
+
+  // Create Audio task on core 1
+  xTaskCreatePinnedToCore(
+    audioTask,   // Task function
+    "Audio Task",// Task name
+    10000,       // Stack size in words
+    NULL,        // Parameters
+    1,           // Priority
+    NULL,        // Task handle
+    1            // Core 1
+  );
 }
 
 void loop() {
@@ -638,27 +678,5 @@ void loop() {
   maintainWiFi();
   fetchWazeData(currentTime);
   handleCommSerial(currentTime);
-
-  // Handle audio playback
-  if (playSound && (wav == nullptr || !wav->isRunning())) {
-    if (wav != nullptr) {
-      wav->stop();
-      delete wav;
-      delete file;
-    }
-    file = new AudioFileSourcePROGMEM(alert_wav, alert_wav_len);
-    wav = new AudioGeneratorWAV();
-    wav->begin(file, out);
-    playSound = false;
-  }
-
-  if (wav != nullptr && wav->isRunning()) {
-    if (!wav->loop()) {
-      wav->stop();
-      delete wav;
-      delete file;
-      wav = nullptr;
-      file = nullptr;
-    }
-  }
+  // Audio handling is now managed by the audio task
 }
