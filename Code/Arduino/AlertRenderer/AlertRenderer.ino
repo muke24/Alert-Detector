@@ -6,8 +6,13 @@
 #include <Encoder.h>
 #include <Bounce2.h>
 #include <HardwareSerial.h>
+// Images
 #include "compassBackground.h"
+#include "compassBackground_0.h"
+#include "compassBackground_1.h"
 #include "compassArrow.h"
+#include "compassArrowOutline.h"
+#include "background.h"
 
 // Pinout for this Viewe 1.28inch ESP32C3 push knob display module.
 #define ADC_PIN 3 // GPIO03
@@ -91,19 +96,24 @@ void update_arrow(lv_timer_t *timer) {
 void lv_example_page(void) {
   lv_obj_t *scr = lv_scr_act();
 
-  /* Set black background for the screen */
-  static lv_style_t style_screen;
-  lv_style_init(&style_screen);
-  lv_style_set_bg_color(&style_screen, lv_color_black());
-  lv_obj_add_style(scr, &style_screen, 0);
+  // static lv_style_t style_screen;
+  // lv_style_init(&style_screen);
+  // lv_style_set_bg_color(&style_screen, lv_color_black());
+  // lv_obj_add_style(scr, &style_screen, 0);
 
   /* Background image */
   lv_obj_t *img_bg = lv_img_create(scr);
-  lv_img_set_src(img_bg, &compassBackground);
-  lv_obj_set_size(img_bg, screenWidth, screenHeight / 2);
-  lv_obj_align(img_bg, LV_ALIGN_TOP_LEFT, 0, 0);
-  lv_obj_set_style_img_recolor(img_bg, lv_color_make(128, 255, 0), 0);
-  lv_obj_set_style_img_recolor_opa(img_bg, 1, 0);
+  lv_img_set_src(img_bg, &background);
+  lv_obj_center(img_bg);
+  lv_obj_set_size(img_bg, screenWidth + 2, screenHeight + 2);
+
+  /* Compass Background image */
+  lv_obj_t *img_cpsbg = lv_img_create(scr);
+  lv_img_set_src(img_cpsbg, &compassBackground);
+  lv_obj_set_size(img_cpsbg, screenWidth, screenHeight / 2);
+  lv_obj_set_style_img_recolor(img_cpsbg, lv_color_make(128, 255, 0), 0);
+  lv_obj_set_style_img_recolor_opa(img_cpsbg, 230, 0);
+  lv_obj_align(img_cpsbg, LV_ALIGN_TOP_MID, 0, 0);
 
   /* Arrow image on top */
   img_arrow = lv_img_create(scr);
@@ -111,7 +121,16 @@ void lv_example_page(void) {
   lv_img_set_pivot(img_arrow, 42, 120);
   lv_obj_align(img_arrow, LV_ALIGN_TOP_MID, 0, 0);
   lv_obj_set_style_img_recolor(img_arrow, lv_color_make(128, 255, 0), 0);
-  lv_obj_set_style_img_recolor_opa(img_arrow, 1, 0);
+  lv_obj_set_style_img_recolor_opa(img_arrow, 230, 0);
+  if (currentAngle < -180.0 || currentAngle > 180.0) {
+    lv_obj_add_flag(img_arrow, LV_OBJ_FLAG_HIDDEN); // Hide arrow initially if no valid data
+  }
+
+  /* Arrow outline image on top of arrow */
+  img_arrowOutline = lv_img_create(scr);
+  lv_img_set_src(img_arrowOutline, &compassArrowOutline);
+  lv_img_set_pivot(img_arrowOutline, 42, 120);
+  lv_obj_align(img_arrowOutline, LV_ALIGN_TOP_MID, 0, 0);
   if (currentAngle < -180.0 || currentAngle > 180.0) {
     lv_obj_add_flag(img_arrow, LV_OBJ_FLAG_HIDDEN); // Hide arrow initially if no valid data
   }
@@ -125,7 +144,7 @@ void lv_example_page(void) {
   } else {
     lv_label_set_text(directionTxt, "No Data");
   }
-  lv_obj_align(directionTxt, LV_ALIGN_CENTER, 0, 0);
+  lv_obj_align(directionTxt, LV_ALIGN_CENTER, 0, -20);
 }
 
 void setup() {
