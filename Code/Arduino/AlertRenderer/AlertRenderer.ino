@@ -226,6 +226,9 @@ void draw_compass_background()
 }
 
 // Method to set up the arrow on a canvas
+// If using dual canvas' does not work, try mathematically changing the arrow_point positions to rotate the arrow.
+// https://grok.com/chat/fc26102f-532a-4a35-8cd6-87b2427b83ea
+// Use pjthompson as login. This chat includes mathematical rotation matrix logic.
 void draw_arrow() {
     // Create source canvas for the arrow
     source_canvas = lv_canvas_create(scr);
