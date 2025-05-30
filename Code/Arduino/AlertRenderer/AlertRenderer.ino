@@ -1,4 +1,8 @@
 // AlertRenderer.ino
+
+// Notes:
+// - Dual canvas is intended. Single canvas rotation is not supported by LVGL.
+
 #include <Arduino_GFX_Library.h>
 #include <lvgl.h>
 #include "freertos/FreeRTOS.h"
@@ -6,14 +10,6 @@
 #include <Encoder.h>
 #include <Bounce2.h>
 #include <HardwareSerial.h>
-//#include <stdio.h>
-// Images
-//#include "compassBackground.h"
-//#include "compassBackground_0.h"
-//#include "compassBackground_1.h"
-//#include "compassArrow.h"
-//#include "compassArrowOutline.h"
-//#include "background.h"
 
 // Pinout for this Viewe 1.28inch ESP32C3 push knob display module.
 #define ADC_PIN 3 // GPIO03
@@ -49,10 +45,6 @@ lv_group_t *group;
 /* Last encoder value for tracking changes */
 static int32_t last_encoder_value = 0;
 
-/* Meter widget and its components */
-static lv_obj_t *meter;
-static lv_meter_scale_t *scale;
-static lv_meter_indicator_t *indic;
 // Direction Text
 static lv_obj_t *directionTxt;
 
@@ -76,9 +68,10 @@ const int arc3_size = dimention - 130;
 const int compass_max_angle = 90;
 
 // Compass Arrow
-lv_obj_t *canvas; // Canvas for the arrow
-const int arrow_width = 84; // Adjusted to match actual canvas width
-const int arrow_height = 128; // Adjusted to match actual canvas height
+lv_obj_t *source_canvas; // Source canvas for the arrow
+lv_obj_t *canvas;        // Destination canvas for rotated arrow
+const int arrow_width = 120; // Adjusted to match actual canvas width
+const int arrow_height = 120; // Adjusted to match actual canvas height
 const int arrow_point_count = 7;
 
 // Color palette
@@ -107,32 +100,78 @@ static void my_encoder_read(lv_indev_drv_t *indev_drv, lv_indev_data_t *data) {
   data->state = button.isPressed() ? LV_INDEV_STATE_PRESSED : LV_INDEV_STATE_RELEASED;
 }
 
-/* Update arrow angle using Meter widget */
+/* Update compass arrow angle  */
 void update_arrow(lv_timer_t *timer) {
+    static float displayedAngle = 0.0; // Current angle displayed by the arrow
+
     if (currentAngle >= -180.0 && currentAngle <= 180.0) { // Valid angle range
-        float adjustedAngle = currentAngle;
-        while (adjustedAngle < -180.0) adjustedAngle += 360.0; // Normalize to [-180, 180]
-        while (adjustedAngle > 180.0) adjustedAngle -= 360.0;
-        //lv_meter_set_indicator_value(meter, indic, (int32_t)adjustedAngle); // Set angle for meter needle
-        //lv_obj_clear_flag(meter, LV_OBJ_FLAG_HIDDEN); // Show meter
-        char angleStr[16]; // Buffer for string conversion
-        snprintf(angleStr, sizeof(angleStr), "%.1f", adjustedAngle); // Convert float to string
-        lv_label_set_text(directionTxt, angleStr); // Update label with angle
+        float targetAngle = currentAngle;
+        // Normalize target angle to [-180, 180]
+        while (targetAngle < -180.0) targetAngle += 360.0;
+        while (targetAngle > 180.0) targetAngle -= 360.0;
+
+        // Smoothly interpolate displayedAngle towards targetAngle
+        float delta = targetAngle - displayedAngle;
+        if (delta > 180.0) delta -= 360.0; // Handle wrapping
+        if (delta < -180.0) delta += 360.0;
+        displayedAngle += delta * 0.1; // Move 10% towards target each update (100ms)
+        if (displayedAngle > 180.0) displayedAngle -= 360.0;
+        if (displayedAngle < -180.0) displayedAngle += 360.0;
+
+        // Clear the destination canvas (fill with transparent color)
+        lv_canvas_fill_bg(canvas, lv_color_make(0, 0, 0), LV_OPA_TRANSP);
+
+        // Get the source image descriptor
+        lv_img_dsc_t *src_img = lv_canvas_get_img(source_canvas);
+
+        // Apply transformation to rotate the arrow
+        lv_canvas_transform(
+            canvas,                    // Destination canvas
+            src_img,                   // Source image descriptor
+            (int16_t)(displayedAngle * 10), // Angle in 0.1 degrees (LVGL convention)
+            256,                       // Zoom factor (256 = no zoom)
+            0,                         // Offset X
+            0,                         // Offset Y
+            arrow_width / 2,           // Pivot X (center of canvas)
+            120,          // Pivot Y (center of canvas)
+            true                       // Enable anti-aliasing
+        );
+
+        // Apply transformation to rotate the arrow
+        lv_canvas_transform(
+            source_canvas,                    // Destination canvas
+            src_img,                   // Source image descriptor
+            (int16_t)0, // Angle in 0.1 degrees (LVGL convention)
+            256,                       // Zoom factor (256 = no zoom)
+            0,                         // Offset X
+            120,                         // Offset Y
+            0,           // Pivot X (center of canvas)
+            0,          // Pivot Y (center of canvas)
+            true                       // Enable anti-aliasing
+        );
+
+        // Show the destination canvas
+        lv_obj_clear_flag(canvas, LV_OBJ_FLAG_HIDDEN);
+
+        // Update the label with the displayed angle
+        char angleStr[16];
+        snprintf(angleStr, sizeof(angleStr), "%.1f", displayedAngle);
+        lv_label_set_text(directionTxt, angleStr);
     } else {
-        //lv_meter_set_indicator_value(meter, indic, 0); // Reset needle to 0
-        //lv_obj_add_flag(meter, LV_OBJ_FLAG_HIDDEN); // Hide meter
-        lv_label_set_text(directionTxt, "No Data"); // Update label to indicate no data
+        // Hide the destination canvas when angle is invalid
+        lv_obj_add_flag(canvas, LV_OBJ_FLAG_HIDDEN);
+        lv_label_set_text(directionTxt, "No Data");
     }
 }
 
-void ApplyBackgroundColor()
+void apply_background_color()
 {
   // Set background color to black
   lv_obj_set_style_bg_color(scr, palette_black, LV_PART_MAIN);
   lv_obj_set_style_bg_opa(scr, LV_OPA_COVER, LV_PART_MAIN);
 }
 
-void DrawCompassBackground()
+void draw_compass_background()
 {
   // Create arc
   arc1 = lv_arc_create(scr);
@@ -187,27 +226,28 @@ void DrawCompassBackground()
 }
 
 // Method to set up the arrow on a canvas
-void DrawArrow() {
-    // Create canvas for the arrow
-    canvas = lv_canvas_create(scr);
-    lv_obj_set_size(canvas, arrow_width, arrow_height); // Set canvas size to 84x128
-    lv_obj_align(canvas, LV_ALIGN_CENTER, 0, 0); // Center the canvas
+void draw_arrow() {
+    // Create source canvas for the arrow
+    source_canvas = lv_canvas_create(scr);
+    lv_obj_set_size(source_canvas, arrow_width, arrow_height); // Set canvas size to 84x128
+    lv_obj_align(source_canvas, LV_ALIGN_CENTER, 0, 0); // Center the source canvas (optional, can be hidden)
+    lv_obj_add_flag(source_canvas, LV_OBJ_FLAG_HIDDEN); // Hide source canvas as it's only for rendering
 
-    // Allocate buffer for the canvas (RGBA format for transparency)
-    static lv_color_t cbuf[LV_CANVAS_BUF_SIZE_TRUE_COLOR_ALPHA(arrow_width, arrow_height)];
-    lv_canvas_set_buffer(canvas, cbuf, arrow_width, arrow_height, LV_IMG_CF_TRUE_COLOR_ALPHA);
+    // Allocate buffer for the source canvas (RGBA format for transparency)
+    static lv_color_t source_cbuf[LV_CANVAS_BUF_SIZE_TRUE_COLOR_ALPHA(arrow_width, arrow_height)];
+    lv_canvas_set_buffer(source_canvas, source_cbuf, arrow_width, arrow_height, LV_IMG_CF_TRUE_COLOR_ALPHA);
 
     // Define arrow points
     lv_point_t arrow_points[] = {
-    {36, 127}, // Base right
-    {47, 127}, // Base left
-    {59, 74},  // Inner left
-    {83, 74},  // Outer left
-    {42, 0},   // Tip (top)
-    {0, 74},   // Outer right
-    {24, 74},  // Inner right
-    {36, 127}  // Back to start
-};
+        {36, 127}, // Base right
+        {47, 127}, // Base left
+        {59, 74},  // Inner left
+        {83, 74},  // Outer left
+        {42, 0},   // Tip (top)
+        {0, 74},   // Outer right
+        {24, 74},  // Inner right
+        {36, 127}  // Back to start
+    };
 
     // Define fill descriptor
     lv_draw_line_dsc_t line_dsc_fill;
@@ -237,27 +277,31 @@ void DrawArrow() {
         }
         if (x_right > x_left) {
             lv_point_t fill_points[] = {{x_left, y}, {x_right, y}};
-            lv_canvas_draw_line(canvas, fill_points, 2, &line_dsc_fill);
+            lv_canvas_draw_line(source_canvas, fill_points, 2, &line_dsc_fill);
         }
     }
 
     // Draw the outline by connecting points with lines
     for (int i = 0; i < arrow_point_count; i++) {
         lv_point_t line_points[] = {arrow_points[i], arrow_points[(i + 1) % arrow_point_count]};
-        lv_canvas_draw_line(canvas, line_points, 2, &line_dsc_outline);
+        lv_canvas_draw_line(source_canvas, line_points, 2, &line_dsc_outline);
     }
+
+    // Create destination canvas for the rotated arrow
+    canvas = lv_canvas_create(scr);
+    lv_obj_set_size(canvas, arrow_width, arrow_height); // Same size as source
+    lv_obj_align(canvas, LV_ALIGN_CENTER, 0, 0); // Center the destination canvas
+
+    // Allocate buffer for the destination canvas
+    static lv_color_t dest_cbuf[LV_CANVAS_BUF_SIZE_TRUE_COLOR_ALPHA(arrow_width, arrow_height)];
+    lv_canvas_set_buffer(canvas, dest_cbuf, arrow_width, arrow_height, LV_IMG_CF_TRUE_COLOR_ALPHA);
+
+    // Initially hide the destination canvas
+    lv_obj_add_flag(canvas, LV_OBJ_FLAG_HIDDEN);
 }
 
-/* Display background and meter widget */
-void lv_example_page(void) {
-  scr = lv_scr_act();
-  ApplyBackgroundColor();
-
-  DrawCompassBackground();
-
-  DrawArrow();
-
-  /* Direction text label */
+void draw_angle_label(){
+/* Direction text label */
   directionTxt = lv_label_create(scr);
   char angleStr[16]; // Buffer for string conversion
   if (currentAngle >= -180.0 && currentAngle <= 180.0) {
@@ -267,6 +311,20 @@ void lv_example_page(void) {
     lv_label_set_text(directionTxt, "No Data");
   }
   lv_obj_align(directionTxt, LV_ALIGN_CENTER, 0, -20);
+}
+
+/* Display background and meter widget */
+void lv_example_page(void) {
+  
+  scr = lv_scr_act();
+
+  apply_background_color();
+
+  draw_compass_background();
+
+  draw_arrow();
+
+  draw_angle_label();
 }
 
 void setup() {
