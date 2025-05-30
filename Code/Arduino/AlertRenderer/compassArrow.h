@@ -1,3 +1,4 @@
+// compassArrow.h
 #ifndef COMPASSARROW_H
 #define COMPASSARROW_H
 

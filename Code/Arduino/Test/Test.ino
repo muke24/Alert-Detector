@@ -22,5 +22,5 @@ void loop() {
   mySerial.write((uint8_t*)&angle, sizeof(angle)); // Send float as 4 bytes
   Serial.print("Sent: ");
   Serial.println(angle, 2); // Debug output to Serial Monitor
-  delay(1000); // Send every second
+  delay(5000); // Send every second
 }
