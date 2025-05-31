@@ -18,7 +18,7 @@
 #define COMM_RX 33
 
 // LED Strip Configuration
-#define LED_PIN 23    // GPIO23 on LILYGO ESP32 (changed from GPIO14 to avoid SD Card SCK conflict)
+#define LED_PIN 14    // GPIO14 on LILYGO ESP32
 #define NUM_LEDS 46   // Total number of LEDs
 
 // Speaker Configuration
