@@ -1,4 +1,4 @@
-LILYGO T-SIM7000G Pinout
+LILYGO T-SIM7000G V1.1 Pinout
 
 Left side:
        |        |       | 3V3
@@ -29,3 +29,19 @@ Pin 36 | GPIO36 | ADC0  | S_VP
 Pin 0  | GPIO0  | ADC1T | TOUCH1
        |        |       | RST
        |        |       | VIN
+
+
+Reserved pins:
+Function		GPIO Pin	Description
+SD Card MISO		2	Data input for SD card via SPI
+SD Card MOSI		15	Data output for SD card via SPI
+SD Card SCK		14	Clock signal for SD card via SPI
+SD Card CS		13	Chip select for SD card via SPI
+SIM7000G RX		26	Receive line for UART communication
+SIM7000G TX		27	Transmit line for UART communication
+SIM7000G PWR		4	Power control pin for the module
+SIM7000G RESET		5	Reset pin for the module
+SIM7000G DTR		25	Data Terminal Ready for serial control
+On-board LED (Blue)	12	Indicator LED on the board
+Battery ADC		35	Analog input for battery voltage sensing
+Solar ADC		36	Analog input for solar panel voltage

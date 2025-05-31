@@ -1,4 +1,4 @@
-// AlertFinder_LILYGO.ino
+// AlertFinder.ino
 // This sketch uses a LILYGO T-SIM7000G to fetch police alerts from the Waze API using GPS coordinates,
 // calculates the relative angle to the closest police alert using HMC5883L magnetometer data,
 // sends the angle via UART2, and animates a WS2812B LED strip based on alert distance using a separate FreeRTOS task.
@@ -18,7 +18,7 @@
 #define COMM_RX 33
 
 // LED Strip Configuration
-#define LED_PIN 14    // GPIO14 on LILYGO ESP32
+#define LED_PIN 23    // GPIO23 on LILYGO ESP32 (changed from GPIO14 to avoid SD Card SCK conflict)
 #define NUM_LEDS 46   // Total number of LEDs
 
 // Speaker Configuration
