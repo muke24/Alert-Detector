@@ -4,6 +4,22 @@
 // sends the angle via UART2, and animates a WS2812B LED strip based on alert distance using a separate FreeRTOS task.
 // Audio playback is now handled by a dedicated task on core 1 via an Adafruit STEMMA Speaker connected to GPIO25.
 
+// TODO: Test using GC9A01 display to display angle data with LILYGO directly, rather than currently plugging in an external ESP32 and sending angle data via RX/TX 
+// which is connected to the display.
+// INSTRUCTIONS
+// Move the LED Strip:
+// Disconnect the WS2812B Data line from GPIO14.
+// Connect it to GPIO32.
+// Connect the Waveshare Display:
+// VCC to 3V3
+// GND to GND
+// DIN to GPIO23
+// CLK to GPIO18
+// CS to GPIO33
+// DC to GPIO12
+// RST to GPIO0
+// BL to 3V3
+
 // SIM7000G Configuration
 #define TINY_GSM_MODEM_SIM7000
 #define TINY_GSM_RX_BUFFER 1024 // Set RX buffer to 1Kb
