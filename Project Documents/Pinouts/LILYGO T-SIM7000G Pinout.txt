@@ -15,7 +15,7 @@ Pin 13 | GPIO13 | ADC14 | TOUCH4
 Pin 12 | GPIO12 | ADC15 | TOUCH5
        |        |       | VBAT
 
-Right side:
+Right side (the side with USB-C port):
 Pin 1  | GPIO01 |       | Serial TX
 Pin 3  | GPIO03 |       | Serial RX
 Pin 22 | GPIO22 |       | Wire_SCL
@@ -45,3 +45,11 @@ SIM7000G DTR		25	Data Terminal Ready for serial control
 On-board LED (Blue)	12	Indicator LED on the board
 Battery ADC		35	Analog input for battery voltage sensing
 Solar ADC		36	Analog input for solar panel voltage
+
+
+Modules attached to LILYGO T-SIM7000G V1.1 (ignoring power):
+
+- LED Strip: "WS2812B Data" to "GPIO14"
+- ESP32 Device: "RX" to "GPIO32", "TX" to "GPIO33"
+- Adafruit Stemma Speaker: "Signal" to "GPIO25"
+- HMC5883 Compass: "SCL" to "GPIO22", "SDA" to "GPIO21"
