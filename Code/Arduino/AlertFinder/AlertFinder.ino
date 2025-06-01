@@ -1,11 +1,24 @@
-// AlertFinder.ino
-// This sketch uses a LILYGO T-SIM7000G to fetch police alerts from the Waze API using GPS coordinates,
-// calculates the relative angle to the closest police alert using HMC5883L magnetometer data,
-// sends the angle via UART2, and animates a WS2812B LED strip based on alert distance using a separate FreeRTOS task.
-// Audio playback is now handled by a dedicated task on core 1 via an Adafruit STEMMA Speaker connected to GPIO25.
+// Project: Alert Radar V1.0
 
-// TODO: Test using GC9A01 display to display angle data with LILYGO directly, rather than currently plugging in an external ESP32 and sending angle data via RX/TX 
-// which is connected to the display.
+// PARTS (V1.0):
+// - LILYGO T-SIM7000G ESP32 (this script runs on this device)
+// - Viewe ESP32 1.28 Inch 240×240 IOT Smart Display Screen Rotate and Press Circular Knob Screen with WiFi BLE
+// - Adafruit Stemma Speaker
+// - WS2812B LED strip (46 in total)
+// - HMC5883 Compass
+
+// (Alert Radar Version 1.0 requirements)
+// TODO: Add support to all Waze alerts (currently, we are only looking for police alerts. We need to add a "selected_alert" int and assign each alert an "id" int)
+// TODO: Allow for more data to be sent via TX (right now, only the relative angle float is being sent. To support all Waze alerts, 
+// we need to send which alert is correlated with the relative angle float sent. We should send an alert index int alongside the relative angle float).
+// TODO: Recieve alert index data from other ESP32 device (Viewe 1.28i display) and use it as our selected alert (When the user changes the selected alert on the other
+// ESP32 device, an int will be sent from the other ESP32 device to this device. We need to check for this int and change our selected alert when it is received).
+
+// PLANNED FOR LATER DEVELOPMENT IN VERSION 2.0, IGNORE FOR "Alert Radar V1.0":
+//
+// - REMOVE VIEWE ESP32 DISPLAY AND USE DISPLAY DIRECTLY WITH LILYGO
+// Test using GC9A01 display to display angle data with LILYGO directly, rather than currently plugging in an 
+// external ESP32 and sending angle data via RX/TX which is connected to the display.
 // INSTRUCTIONS
 // Move the LED Strip:
 // Disconnect the WS2812B Data line from GPIO14.
@@ -19,6 +32,15 @@
 // DC to GPIO12
 // RST to GPIO0
 // BL to 3V3
+//
+// - UPGRADE COMPASS TO BNO086
+
+
+// AlertFinder.ino
+// This sketch uses a LILYGO T-SIM7000G to fetch police alerts from the Waze API using GPS coordinates,
+// calculates the relative angle to the closest police alert using HMC5883L magnetometer data,
+// sends the angle via UART2, and animates a WS2812B LED strip based on alert distance using a separate FreeRTOS task.
+// Audio playback is now handled by a dedicated task on core 1 via an Adafruit STEMMA Speaker connected to GPIO25.
 
 // SIM7000G Configuration
 #define TINY_GSM_MODEM_SIM7000
@@ -89,16 +111,16 @@ AudioFileSourcePROGMEM *file = nullptr;
 AudioOutputI2S *out = nullptr;
 
 // LED Row Definitions
-int row1[] = {0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11};              // Row 1: LEDs 1 to 12
-int row2[] = {23, 22, 21, 20, 19, 18, 17, 16, 15, 14, 13, 12};    // Row 2: LEDs 13 to 24
-int row3[] = {24, 25, 26, 27, 28, 29, 30, 31, 32, 33, 34};        // Row 3: LEDs 25 to 35
-int row4[] = {45, 44, 43, 42, 41, 40, 39, 38, 37, 36, 35};        // Row 4: LEDs 36 to 46
+int row1[] = {0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11};              // Row 1: LEDs 0 to 11
+int row2[] = {22, 21, 20, 19, 18, 17, 16, 15, 14, 13, 12};        // Row 2: LEDs 12 to 22
+int row3[] = {23, 24, 25, 26, 27, 28, 29, 30, 31, 32, 33};        // Row 3: LEDs 23 to 33
+int row4[] = {45, 44, 43, 42, 41, 40, 39, 38, 37, 36, 35, 34};    // Row 4: LEDs 34 to 45
 
 // Number of LEDs in Each Row
 const int num_leds_row1 = 12;
-const int num_leds_row2 = 12;
+const int num_leds_row2 = 11;
 const int num_leds_row3 = 11;
-const int num_leds_row4 = 11;
+const int num_leds_row4 = 12;
 
 // LED Color and Multiplier
 CRGB color = CRGB(128, 255, 0); // R:128, G:255, B:0 (lime green)
