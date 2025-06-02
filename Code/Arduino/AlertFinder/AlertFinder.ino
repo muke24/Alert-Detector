@@ -14,28 +14,6 @@
 // TODO: Recieve alert index data from other ESP32 device (Viewe 1.28i display) and use it as our selected alert (When the user changes the selected alert on the other
 // ESP32 device, an int will be sent from the other ESP32 device to this device. We need to check for this int and change our selected alert when it is received).
 
-// PLANNED FOR LATER DEVELOPMENT IN VERSION 2.0, IGNORE FOR "Alert Radar V1.0":
-//
-// - REMOVE VIEWE ESP32 DISPLAY AND USE DISPLAY DIRECTLY WITH LILYGO
-// Test using GC9A01 display to display angle data with LILYGO directly, rather than currently plugging in an 
-// external ESP32 and sending angle data via RX/TX which is connected to the display.
-// INSTRUCTIONS
-// Move the LED Strip:
-// Disconnect the WS2812B Data line from GPIO14.
-// Connect it to GPIO32.
-// Connect the Waveshare Display:
-// VCC to 3V3
-// GND to GND
-// DIN to GPIO23
-// CLK to GPIO18
-// CS to GPIO33
-// DC to GPIO12
-// RST to GPIO0
-// BL to 3V3
-//
-// - UPGRADE COMPASS TO BNO086
-
-
 // AlertFinder.ino
 // This sketch uses a LILYGO T-SIM7000G to fetch police alerts from the Waze API using GPS coordinates,
 // calculates the relative angle to the closest police alert using HMC5883L magnetometer data,
