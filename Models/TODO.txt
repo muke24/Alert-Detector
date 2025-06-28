@@ -1,0 +1,2 @@
+- Make horizontal split through center to allow device to separate top from bottom and add screw holes in top
+- Make the front of the device screw on. This will separate the LED rack from the device itself.

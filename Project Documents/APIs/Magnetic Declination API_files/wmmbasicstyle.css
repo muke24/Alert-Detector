@@ -1,0 +1,66 @@
+body {font-family: verdana, arial, helvetica, san-serif; margin-top:0; margin-left: 0; margin-right: 0; }
+
+a:link {color: #0000ff; text-decoration: none;}
+a:active {color: #aa0000;}
+a:visited {color: #000099;}
+a:hover {text-decoration: underline;}
+
+h1, h2, h3, h4, h5, h6 {font-family: verdana, arial, helvetica, sans-serif}
+
+table {font-family: verdana, arial, helvetica, sans-serif; font-size: 9pt}
+tr {font-family: verdana, arial, helvetica, sans-serif; font-size: 9pt}
+td {font-family: verdana, arial, helvetica, sans-serif; font-size: 9pt}
+
+li {font-family: verdana, arial, helvetica, sans-serif; font-size: 9pt}
+ 
+h1 {color: navy; font-size: 1.4em}
+h2 {color: navy; font-size: 1.2em}
+h3 {color: navy; font-size: 1em}
+h4 {color: navy; font-size: 1em}
+
+p {font-family: verdana, arial, helvetica, sans-serif; font-size: 9pt}
+
+.blue {color: #000099;}
+
+.list {font-size: 0.8em; font-family: verdana, arial, helvetica, sans-serif; margin-top: 10px; margin-left: 15px; color: #000099}
+address, cite, blockquote {font-size: 8pt; font-weight: normal; font-family: verdana, arial, helvetica, sans-serif; font-style: italic;}
+b, strong, em {font-weight: bold;}
+
+.sidebar {font-size: 9pt; font-family: verdana, arial, helvetica, sans-serif; color: white;}
+.sidebarw {font-size: 9pt; font-family: verdana, arial, helvetica, sans-serif; color: white; background-color: transparent;}
+.sidebar2 {font-size: 8.5pt; font-family: verdana, arial, helvetica, sans-serif;}
+
+.normaltext {font-size: 9pt; font-family: verdana, arial, helvetica, sans-serif;}
+.fixedtext {font-family: courier, monospace;}
+.navytext {font-size: 9pt; font-family: verdana, arial, helvetica, sans-serif; color: navy;}
+
+.indent {margin-left: 10px;}
+
+.subnav {font-size: 8pt; font-family: verdana, arial, helvetica, sans-serif; color:white; background-color: transparent;}
+
+.topbar {font-size: 8pt; font-weight: normal; font-family: verdana, arial, helvetica, sans-serif;}
+
+.align-right {text-align: right;}
+.align-center {text-align: center;}
+
+.footltbg {font-size: 9pt; font-family: verdana, arial, helvetica, sans-serif; color: #000099;}
+.footdkbg {font-size: 9pt; font-family: verdana, arial, helvetica, sans-serif; color: #eeeeff;}
+
+table.flex {width: 96%; max-width: 1024px;}
+
+table.menu {right: auto; left: auto; top: auto; bottom: auto; border: 0px solid; border-spacing:5px;}
+td.menuoption {vertical-align:top; margin-top:3px; margin-bottom:3px; margin-left:3px; margin-right:3px; padding:3px; font:9pt arial, verdana, helvetica, sans-serif; text-align:center; border:3px solid #336699; background:#ffffff;}
+
+a.menuoption:link {font:9pt arial, verdana, helvetica, sans-serif; color:#0000ff; text-decoration:none; font-weight:bold;}
+a.menuoption:hover {font:9pt arial, verdana, helvetica, sans-serif; color:#ff0000; text-decoration:underline; background:#ffffff; font-weight:bold;}
+a.menuoption:active {font:9pt arial, verdana, helvetica, sans-serif; color:#000099; text-decoration:none; background:#ffffff; font-weight:bold}
+a.menuoption:visited {font:9pt arial, verdana, helvetica, sans-serif; color:#000099; text-decoration:none; background:#ffffff; font-weight:bold}
+
+table.menu2 {right: auto; left: auto; top: auto; bottom: auto; border: 0px solid; border-spacing:5px;}
+td.menu2option {vertical-align:top; margin-top:3px; margin-bottom:3px; margin-left:3px; margin-right:3px; padding:3px; font:9pt arial, verdana, helvetica, sans-serif; text-align:center; border:3px solid #ccccdd; background:#ffffff;}
+
+a.menu2option:link {font:9pt arial, verdana, helvetica, sans-serif; color:#0000ff; text-decoration:none; font-weight:bold;}
+a.menu2option:hover {font:9pt arial, verdana, helvetica, sans-serif; color:#ff0000; text-decoration:underline; background:#ffffff; font-weight:bold;}
+a.menu2option:active {font:9pt arial, verdana, helvetica, sans-serif; color:#000099; text-decoration:none; font-weight:bold}
+a.menu2option:visited {font:9pt arial, verdana, helvetica, sans-serif; color:#000099; text-decoration:none; font-weight:bold}
+

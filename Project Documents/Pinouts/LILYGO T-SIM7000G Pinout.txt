@@ -48,8 +48,9 @@ Solar ADC		36	Analog input for solar panel voltage
 
 
 Modules attached to LILYGO T-SIM7000G V1.1 (ignoring power):
-
 - LED Strip: "WS2812B Data" to "GPIO14"
-- ESP32 Device: "RX" to "GPIO32", "TX" to "GPIO33"
+- ESP32 Device: "RX" to "GPIO32", "TX" to "GPIO33" - (TO BE REPLACED WITH WAVESHARE DISPLAY)
 - Adafruit Stemma Speaker: "Signal" to "GPIO25"
-- HMC5883 Compass: "SCL" to "GPIO22", "SDA" to "GPIO21"
+- BNO086 Compass: "SCL" to "GPIO22", "SDA" to "GPIO21", "INT" to "GPIO19", "RST" to "GPIO23"
+(Keep in mind that BNO086 RST should be connected to a GPIO pin and NOT the RST pin on the LILYGO ESP32!)
+- WaveShare Display (REPLACING ESP32 DEVICE): (TO COMPLETE...)

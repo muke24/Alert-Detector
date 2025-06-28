@@ -1,24 +1,11 @@
-// Project: Alert Radar V1.0
+// Project: Alert Finder V1.0
 
 // PARTS (V1.0):
-// - LILYGO T-SIM7000G ESP32 (this script runs on this device)
+// - LILYGO T-SIM7000G V1.1 ESP32 (this script runs on this device)
 // - Viewe ESP32 1.28 Inch 240×240 IOT Smart Display Screen Rotate and Press Circular Knob Screen with WiFi BLE
 // - Adafruit Stemma Speaker
 // - WS2812B LED strip (46 in total)
-// - HMC5883 Compass
-
-// (Alert Radar Version 1.0 requirements)
-// TODO: Add support to all Waze alerts (currently, we are only looking for police alerts. We need to add a "selected_alert" int and assign each alert an "id" int)
-// TODO: Allow for more data to be sent via TX (right now, only the relative angle float is being sent. To support all Waze alerts, 
-// we need to send which alert is correlated with the relative angle float sent. We should send an alert index int alongside the relative angle float).
-// TODO: Recieve alert index data from other ESP32 device (Viewe 1.28i display) and use it as our selected alert (When the user changes the selected alert on the other
-// ESP32 device, an int will be sent from the other ESP32 device to this device. We need to check for this int and change our selected alert when it is received).
-
-// AlertFinder.ino
-// This sketch uses a LILYGO T-SIM7000G to fetch police alerts from the Waze API using GPS coordinates,
-// calculates the relative angle to the closest police alert using HMC5883L magnetometer data,
-// sends the angle via UART2, and animates a WS2812B LED strip based on alert distance using a separate FreeRTOS task.
-// Audio playback is now handled by a dedicated task on core 1 via an Adafruit STEMMA Speaker connected to GPIO25.
+// - BNO086 IMU (replacing HMC5883L)
 
 // SIM7000G Configuration
 #define TINY_GSM_MODEM_SIM7000
@@ -40,15 +27,20 @@
 // Speaker Configuration
 #define SPEAKER_PIN 25 // GPIO25 for Adafruit STEMMA Speaker signal (DAC1)
 
+// BNO086 Configuration
+#define BNO08X_INT  19  // GPIO19 for interrupt
+#define BNO08X_RST  23  // GPIO23 for reset
+#define BNO08X_ADDR 0x4B  // Default I2C address (0x4A if ADR jumper closed)
+
 // Libraries
 #include <HardwareSerial.h>     // For UART communication
 #include <TinyGsmClient.h>      // For SIM7000G modem
 #include <TinyGPS++.h>          // For parsing GPS data
-#include <Wire.h>               // For I2C with HMC5883L
-#include <Adafruit_HMC5883_U.h> // For HMC5883L magnetometer
+#include <Wire.h>               // For I2C with BNO086
+#include "SparkFun_BNO08x_Arduino_Library.h"  // For BNO086 IMU
 #include <WiFi.h>               // For Wi-Fi connectivity
 #include <WiFiClientSecure.h>   // For secure HTTPS requests
-#include <HTTPClient.h>         // For HTTP requests to Waze API
+#include <HTTPClient.h>         // For HTTP requests to Waze API and NOAA WMM
 #include <ArduinoJson.h>        // For parsing JSON responses
 #include <FastLED.h>            // For WS2812B LED strip control
 #include <freertos/FreeRTOS.h>  // For FreeRTOS tasks
@@ -67,10 +59,15 @@ const char gprsPass[] = "";
 const float maxDistanceKm = 5.0f;      // Max distance for alerts (kilometers)
 const float checkInterval = 45.0f;      // Interval to check for new alerts (seconds)
 const float movementThreshold = 0.2f;   // Distance to trigger alert check (kilometers)
+const float wmmUpdateDistance = 100.0f; // Distance to trigger WMM update (kilometers)
+const unsigned long wmmUpdateInterval = 24 * 60 * 60 * 1000UL; // Check WMM daily (ms)
+const unsigned long wmmRetryDelay = 5 * 60 * 1000UL; // Retry after 5 minutes on API error
 const char* baseHost = "www.waze.com";  // Waze API host
 const char* basePath = "/live-map/api/georss"; // Waze API path
+const char* wmmHost = "www.ngdc.noaa.gov"; // NOAA WMM API host
+const char* wmmPath = "/geomag-web/calculators/calculateDeclination"; // NOAA WMM API path
 const unsigned long printInterval = 500;         // Print GPS/IMU data every 500ms
-const unsigned long retryInterval = 5000;        // Retry HMC5883L initialization every 5s
+const unsigned long retryInterval = 5000;        // Retry BNO086 initialization every 5s
 const unsigned long receivePrintInterval = 1000; // Print received UART data every 1000ms
 const unsigned long ledUpdateInterval = 50;      // Update LEDs every 50ms
 const int maxImuFailures = 5;                    // Max consecutive IMU failures
@@ -80,7 +77,7 @@ HardwareSerial commSerial(2);  // UART2 for communication
 TinyGsm modem(SerialAT);       // TinyGSM modem object
 TinyGsmClient gsmClient(modem); // TinyGSM client
 TinyGPSPlus gps;               // TinyGPS++ object
-Adafruit_HMC5883_Unified mag = Adafruit_HMC5883_Unified(12345); // HMC5883L magnetometer
+BNO08x myIMU;                  // BNO086 IMU
 CRGB leds[NUM_LEDS];           // LED strip array
 
 // Audio Objects
@@ -112,6 +109,8 @@ unsigned long lastImuPrint = 0;
 unsigned long lastBnoRetry = 0;
 unsigned long lastApiCall = 0;
 unsigned long lastReceivePrint = 0;
+unsigned long lastWmmUpdate = 0; // Timestamp of last WMM update
+unsigned long lastWmmAttempt = 0; // Timestamp of last WMM API attempt
 float timeSinceLastCheck = 0;
 bool isLocationInitialized = false;
 float currentDirection = 0;
@@ -127,7 +126,19 @@ struct Location {
 };
 Location currentLocation = {0, 0};
 Location lastCheckedLocation = {0, 0};
+Location lastWmmLocation = {0, 0}; // Location of last WMM update
 
+// Declination Data Structure
+struct DeclinationData {
+  float latitude;
+  float longitude;
+  float declination;
+  String modelVersion; // e.g., "WMM2025"
+  bool isValid;
+};
+DeclinationData currentDeclination = {0, 0, 0, "WMM2025", false};
+
+// Data Structures for Alerts
 struct Alert {
   String type;
   String subtype;
@@ -194,8 +205,159 @@ float calculateFacingDirection(Alert alert) {
 float calculateMultiplier(float distance) {
   if (distance >= maxDistanceKm) return 1.0f;
   if (distance <= 0) return 2.0f;
-  // Linear interpolation between 2.0 (at 0 km) and 1.0 (at maxDistanceKm)
-  return 2.0f - (distance / maxDistanceKm);
+  return 2.0f - (distance / maxDistanceKm); // Linear interpolation
+}
+
+bool fetchWmmData(Location location, DeclinationData &declination) {
+  if (!isLocationInitialized || (WiFi.status() != WL_CONNECTED && !isGprsConnected)) {
+    Serial.println("Cannot fetch WMM data: No internet or invalid location");
+    return false;
+  }
+
+  // Check if we're in a retry delay period due to previous API error
+  if (millis() - lastWmmAttempt < wmmRetryDelay) {
+    Serial.println("WMM API retry delay active. Using cached declination.");
+    return false;
+  }
+  lastWmmAttempt = millis();
+
+  // Get date from GPS or use default (2025-06-27)
+  int year = 2025;
+  int month = 6;
+  int day = 27;
+  if (gps.date.isValid()) {
+    year = gps.date.year();
+    month = gps.date.month();
+    day = gps.date.day();
+    // Validate year for WMM (2024-2029)
+    if (year < 2024 || year > 2029) {
+      Serial.println("GPS year " + String(year) + " outside WMM range (2024-2029). Using default 2025.");
+      year = 2025;
+    }
+    Serial.print("Using GPS date: ");
+    Serial.print(year);
+    Serial.print("-");
+    Serial.print(month);
+    Serial.print("-");
+    Serial.println(day);
+  } else {
+    Serial.println("Invalid GPS date. Using default date: 2025-06-27");
+  }
+
+  // Construct API request with GPS date
+  String path = String(wmmPath) + "?lat1=" + String(location.latitude, 6) +
+                "&lon1=" + String(location.longitude, 6) +
+                "&model=WMM" +
+                "&startYear=" + String(year) +
+                "&startMonth=" + String(month) +
+                "&startDay=" + String(day) +
+                "&key=zNEw7" +
+                "&resultFormat=json";
+  String payload;
+
+  if (WiFi.status() == WL_CONNECTED) {
+    Serial.println("Fetching WMM data via Wi-Fi...");
+    HTTPClient http;
+    WiFiClientSecure client;
+    client.setInsecure(); // Note: For production, use proper certificates
+    String url = "https://" + String(wmmHost) + path;
+    http.setTimeout(10000);
+    if (!http.begin(client, url)) {
+      Serial.println("Failed to begin HTTP connection for WMM");
+      http.end();
+      return false;
+    }
+    int httpCode = http.GET();
+    if (httpCode <= 0 || httpCode != HTTP_CODE_OK) {
+      Serial.println("WMM API call failed, HTTP code: " + String(httpCode));
+      if (httpCode == 429) {
+        Serial.println("Rate limit exceeded. Retrying after 5 minutes.");
+      }
+      http.end();
+      return false;
+    }
+    payload = http.getString();
+    http.end();
+  } else {
+    Serial.println("Fetching WMM data via cellular...");
+    String response;
+    if (!gsmClient.connect(wmmHost, 443)) {
+      Serial.println("Failed to connect to NOAA WMM server via cellular");
+      return false;
+    }
+    String request = "GET " + path + " HTTP/1.1\r\n";
+    request += "Host: " + String(wmmHost) + "\r\n";
+    request += "Connection: close\r\n";
+    request += "\r\n";
+    gsmClient.print(request);
+    unsigned long timeout = millis();
+    while (gsmClient.connected() && millis() - timeout < 10000L) {
+      if (gsmClient.available()) {
+        response = gsmClient.readString();
+        break;
+      }
+    }
+    gsmClient.stop();
+    int headerEnd = response.indexOf("\r\n\r\n");
+    if (headerEnd != -1) {
+      payload = response.substring(headerEnd + 4);
+    } else {
+      Serial.println("Failed to parse cellular WMM HTTP response");
+      return false;
+    }
+  }
+
+  DynamicJsonDocument doc(1024);
+  DeserializationError error = deserializeJson(doc, payload);
+  if (error) {
+    Serial.println("WMM JSON parsing failed: " + String(error.c_str()));
+    return false;
+  }
+
+  if (!doc.containsKey("result") || !doc["result"][0].containsKey("declination")) {
+    Serial.println("WMM JSON response missing declination data");
+    return false;
+  }
+
+  declination.latitude = location.latitude;
+  declination.longitude = location.longitude;
+  declination.declination = doc["result"][0]["declination"].as<float>();
+  declination.modelVersion = doc["model"].as<String>();
+  declination.isValid = true;
+
+  Serial.print("Fetched WMM Declination: ");
+  Serial.print(declination.declination);
+  Serial.print("° for Lat: ");
+  Serial.print(location.latitude, 6);
+  Serial.print(", Lon: ");
+  Serial.print(location.longitude, 6);
+  Serial.print(", Model: ");
+  Serial.println(declination.modelVersion);
+
+  return true;
+}
+
+float calculateDeclination(float latitude, float longitude) {
+  if (!currentDeclination.isValid || 
+      calculateDistance(currentLocation, lastWmmLocation) > wmmUpdateDistance ||
+      millis() - lastWmmUpdate >= wmmUpdateInterval) {
+    DeclinationData newDeclination;
+    if (fetchWmmData(currentLocation, newDeclination)) {
+      if (!currentDeclination.isValid || 
+          newDeclination.modelVersion != currentDeclination.modelVersion ||
+          calculateDistance(currentLocation, {currentDeclination.latitude, currentDeclination.longitude}) > wmmUpdateDistance) {
+        currentDeclination = newDeclination;
+        lastWmmLocation = currentLocation;
+        lastWmmUpdate = millis();
+      }
+    } else if (currentDeclination.isValid) {
+      Serial.println("Using cached declination due to fetch failure");
+    } else {
+      Serial.println("No valid declination data available. Using 0.0");
+      return 0.0;
+    }
+  }
+  return currentDeclination.declination;
 }
 
 // Hardware Initialization Functions
@@ -253,14 +415,23 @@ void initGPS() {
   modem.enableGPS();
 }
 
-void initHMC5883L() {
+void initBNO086() {
   Wire.begin(21, 22); // SDA=21, SCL=22 on LILYGO ESP32
-  if (!mag.begin()) {
-    Serial.println("Failed to find HMC5883L. Check wiring!");
-    bnoInitialized = false;
-  } else {
-    Serial.println("HMC5883L initialized successfully!");
+  if (myIMU.begin(BNO08X_ADDR, Wire, BNO08X_INT, BNO08X_RST)) {
+    Serial.println("BNO086 initialized successfully!");
     bnoInitialized = true;
+    setReports();
+  } else {
+    Serial.println("Failed to find BNO086. Check wiring!");
+    bnoInitialized = false;
+  }
+}
+
+void setReports() {
+  if (myIMU.enableGeomagneticRotationVector(100)) {  // Report every 100ms
+    Serial.println("Geomagnetic rotation vector enabled");
+  } else {
+    Serial.println("Failed to enable geomagnetic rotation vector");
   }
 }
 
@@ -283,6 +454,7 @@ void updateGPS() {
       currentLocation.longitude = lon;
       if (!isLocationInitialized) {
         lastCheckedLocation = currentLocation;
+        lastWmmLocation = currentLocation;
         isLocationInitialized = true;
       }
       return;
@@ -296,6 +468,7 @@ void updateGPS() {
     currentLocation.longitude = gps.location.lng();
     if (!isLocationInitialized) {
       lastCheckedLocation = currentLocation;
+      lastWmmLocation = currentLocation;
       isLocationInitialized = true;
     }
   }
@@ -314,29 +487,50 @@ void printGPS(unsigned long currentTime) {
 }
 
 void updateIMU(unsigned long currentTime) {
-  if (!bnoInitialized && (currentTime - lastBnoRetry >= retryInterval)) {
-    initHMC5883L();
-    lastBnoRetry = currentTime;
+  if (!bnoInitialized) {
+    if (currentTime - lastBnoRetry >= retryInterval) {
+      initBNO086();
+      lastBnoRetry = currentTime;
+    }
+    return;
   }
-  if (bnoInitialized && (currentTime - lastImuPrint >= printInterval)) {
-    sensors_event_t event;
-    if (mag.getEvent(&event)) {
-      float heading = atan2(event.magnetic.y, event.magnetic.x);
-      if (heading < 0) heading += 2 * PI;
-      currentDirection = heading * 180 / PI;
-      Serial.print("HMC5883L Heading: ");
-      Serial.println(currentDirection);
-      imuFailureCount = 0;
-    } else {
-      Serial.println("HMC5883L: No data");
-      imuFailureCount++;
+
+  if (myIMU.wasReset()) {
+    Serial.println("Sensor reset detected");
+    setReports();
+  }
+
+  if (myIMU.getSensorEvent()) {
+    if (myIMU.getSensorEventID() == SENSOR_REPORTID_GEOMAGNETIC_ROTATION_VECTOR) {
+      float w = myIMU.getQuatReal();
+      float x = myIMU.getQuatI();
+      float y = myIMU.getQuatJ();
+      float z = myIMU.getQuatK();
+
+      // Calculate yaw (heading) in radians
+      float yaw = atan2(2.0 * (w * z + x * y), 1.0 - 2.0 * (y * y + z * z));
+      float headingMagnetic = yaw * (180.0 / PI);
+      if (headingMagnetic < 0) headingMagnetic += 360;
+
+      // Adjust for true north with magnetic declination from GPS
+      float declination = calculateDeclination(currentLocation.latitude, currentLocation.longitude);
+      float headingTrue = headingMagnetic + declination;
+      if (headingTrue >= 360) headingTrue -= 360;
+      if (headingTrue < 0) headingTrue += 360;
+
+      currentDirection = headingTrue;
+
+      if (currentTime - lastImuPrint >= printInterval) {
+        Serial.print("BNO086 Magnetic Heading: ");
+        Serial.print(headingMagnetic);
+        Serial.print("° | True Heading: ");
+        Serial.print(headingTrue);
+        Serial.print("° | Declination: ");
+        Serial.print(declination);
+        Serial.println("°");
+        lastImuPrint = currentTime;
+      }
     }
-    if (imuFailureCount >= maxImuFailures) {
-      Serial.println("HMC5883L disconnected. Attempting to reinitialize...");
-      bnoInitialized = false;
-      imuFailureCount = 0;
-    }
-    lastImuPrint = currentTime;
   }
 }
 
@@ -385,7 +579,7 @@ void maintainWiFi() {
 
 bool performCellularHttpGet(const String& host, const String& path, String& response) {
   if (!gsmClient.connect(host.c_str(), 443)) {
-    Serial.println("Failed to connect to Waze server via cellular");
+    Serial.println("Failed to connect to server via cellular");
     return false;
   }
   String request = "GET " + path + " HTTP/1.1\r\n";
@@ -654,7 +848,7 @@ void setup() {
   initCommSerial();
   initWiFi();
   initGPS();
-  initHMC5883L();
+  initBNO086();
   FastLED.addLeds<WS2812B, LED_PIN, GRB>(leds, NUM_LEDS); // Initialize LED strip
 
   // Initialize audio output to DAC on GPIO25
@@ -694,5 +888,4 @@ void loop() {
   maintainWiFi();
   fetchWazeData(currentTime);
   handleCommSerial(currentTime);
-  // Audio handling is now managed by the audio task
 }
