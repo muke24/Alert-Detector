@@ -1,35 +1,34 @@
 LILYGO T-SIM7000G V1.1 Pinout
 
 Left side:
-       |        |       | 3V3
-       |        |       | GND
+       |        |       | 3V3
+       |        |       | GND
 Pin 32 | GPIO32 | ADC04 | TOUCH9
 Pin 33 | GPIO33 | ADC05 | TOUCH8
 Pin 34 | GPIO34 | ADC06 | TOUCH7
 Pin 35 | GPIO35 | ADC07 | TOUCH6
-Pin 25 | GPIO25 | DAC1  | 
-Pin 26 | GPIO26 | DAC2  | 
+Pin 25 | GPIO25 | DAC1  | 
+Pin 26 | GPIO26 | DAC2  | 
 Pin 27 | GPIO27 | ADC17 | TOUCH0
 Pin 14 | GPIO14 | ADC12 | TOUCH2
 Pin 13 | GPIO13 | ADC14 | TOUCH4
 Pin 12 | GPIO12 | ADC15 | TOUCH5
-       |        |       | VBAT
+       |        |       | VBAT
 
 Right side (the side with USB-C port):
-Pin 1  | GPIO01 |       | Serial TX
-Pin 3  | GPIO03 |       | Serial RX
-Pin 22 | GPIO22 |       | Wire_SCL
-Pin 21 | GPIO21 |       | Wire_SDA
-Pin 23 | GPIO23 |       | VSPI_MOSI
-Pin 19 | GPIO19 |       | VSPI_MISO
-Pin 18 | GPIO18 |       | VSPI_SCK
-Pin 5  | GPIO5  |       | VSPI_SS
+Pin 1  | GPIO01 |       | Serial TX
+Pin 3  | GPIO03 |       | Serial RX
+Pin 22 | GPIO22 |       | Wire_SCL
+Pin 21 | GPIO21 |       | Wire_SDA
+Pin 23 | GPIO23 |       | VSPI_MOSI
+Pin 19 | GPIO19 |       | VSPI_MISO
+Pin 18 | GPIO18 |       | VSPI_SCK
+Pin 5  | GPIO5  |       | VSPI_SS
 Pin 39 | GPIO39 | ADC03 | S_VN
-Pin 36 | GPIO36 | ADC0  | S_VP
-Pin 0  | GPIO0  | ADC1T | TOUCH1
-       |        |       | RST
-       |        |       | VIN
-
+Pin 36 | GPIO36 | ADC0  | S_VP
+Pin 0  | GPIO0  | ADC1T | TOUCH1
+       |        |       | RST
+       |        |       | VIN
 
 Reserved pins:
 Function		GPIO Pin	Description
@@ -46,11 +45,8 @@ On-board LED (Blue)	12	Indicator LED on the board
 Battery ADC		35	Analog input for battery voltage sensing
 Solar ADC		36	Analog input for solar panel voltage
 
-
 Modules attached to LILYGO T-SIM7000G V1.1 (ignoring power):
 - LED Strip: "WS2812B Data" to "GPIO14"
-- ESP32 Device: "RX" to "GPIO32", "TX" to "GPIO33" - (TO BE REPLACED WITH WAVESHARE DISPLAY)
 - Adafruit Stemma Speaker: "Signal" to "GPIO25"
-- BNO086 Compass: "SCL" to "GPIO22", "SDA" to "GPIO21", "INT" to "GPIO19", "RST" to "GPIO23"
-(Keep in mind that BNO086 RST should be connected to a GPIO pin and NOT the RST pin on the LILYGO ESP32!)
-- WaveShare Display (REPLACING ESP32 DEVICE): (TO COMPLETE...)
+- Adafruit LSM6DSOX + LIS3MDL: "SCL" to "GPIO22", "SDA" to "GPIO21"
+- Waveshare 1.28in Display: "DIN" to "GPIO23", "CLK" to "GPIO18", "CS" to "GPIO19", "DC" to "GPIO32", "RST" to "GPIO33", "BL" to "GPIO12"

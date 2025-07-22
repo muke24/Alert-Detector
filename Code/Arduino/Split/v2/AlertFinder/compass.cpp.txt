@@ -1,0 +1,124 @@
+// compass.cpp
+#include "compass.h"
+#include "config.h"
+#include "global_types.h"
+#include "network_manager.h" // Needed for calculateDeclination()
+#include <Wire.h>
+#include <math.h>
+
+// Helper function for tilt-compensation
+static float getTiltCompensatedHeading(sensors_event_t* accel_event, sensors_event_t* mag_event);
+
+// Timestamps for internal logic
+static unsigned long lastImuPrint = 0;
+static unsigned long lastImuRetry = 0;
+
+void initCompass() {
+    Wire.begin(IMU_SDA, IMU_SCL);
+
+    bool dsoxSuccess = dsox.begin_I2C();
+    bool lis3mdlSuccess = lis3mdl.begin_I2C();
+
+    if (dsoxSuccess && lis3mdlSuccess) {
+        Serial.println("LSM6DSOX and LIS3MDL initialized successfully!");
+        imuInitialized = true;
+
+        // Set sensor settings (optional, defaults are usually fine)
+        dsox.setAccelDataRate(LSM6DS_RATE_104_HZ);
+        dsox.setGyroDataRate(LSM6DS_RATE_104_HZ);
+        lis3mdl.setDataRate(LIS3MDL_DATARATE_1000_HZ);
+        lis3mdl.setRange(LIS3MDL_RANGE_4_GAUSS);
+        lis3mdl.setPerformanceMode(LIS3MDL_HIGH_PERFORMANCE_MODE);
+        lis3mdl.setOperationMode(LIS3MDL_CONTINUOUSMODE);
+
+    } else {
+        Serial.println("Failed to find LSM6DSOX or LIS3MDL. Check wiring!");
+        if (!dsoxSuccess) Serial.println("-> LSM6DSOX not found.");
+        if (!lis3mdlSuccess) Serial.println("-> LIS3MDL not found.");
+        imuInitialized = false;
+    }
+}
+
+void updateIMU() {
+    unsigned long currentTime = millis();
+
+    // If the IMU is not initialized, periodically try to initialize it.
+    if (!imuInitialized) {
+        if (currentTime - lastImuRetry >= IMU_RETRY_INTERVAL_MS) {
+            Serial.println("Retrying IMU initialization...");
+            initCompass();
+            lastImuRetry = currentTime;
+        }
+        return;
+    }
+
+    // Get new sensor events
+    sensors_event_t accel;
+    sensors_event_t gyro; // Gyro data is available but not used for this heading calculation
+    sensors_event_t mag;
+    
+    if (dsox.getEvent(&accel, &gyro) && lis3mdl.getEvent(&mag)) {
+        
+        // Calculate tilt-compensated heading from accelerometer and magnetometer data
+        float headingMagnetic = getTiltCompensatedHeading(&accel, &mag);
+
+        // Get magnetic declination to adjust for true north
+        float declination = calculateDeclination(currentLocation.latitude, currentLocation.longitude);
+
+        // Calculate true heading
+        float headingTrue = headingMagnetic + declination;
+        if (headingTrue >= 360) headingTrue -= 360;
+        if (headingTrue < 0) headingTrue += 360;
+
+        // Update the global direction variable
+        currentDirection = headingTrue;
+
+        // Print the heading data periodically for debugging
+        if (currentTime - lastImuPrint >= GPS_IMU_PRINT_INTERVAL_MS) {
+            Serial.print("IMU Magnetic Heading: ");
+            Serial.print(headingMagnetic, 1);
+            Serial.print("° | Declination: ");
+            Serial.print(declination, 2);
+            Serial.print("° | True Heading: ");
+            Serial.print(headingTrue, 1);
+            Serial.println("°");
+            lastImuPrint = currentTime;
+        }
+    } else {
+        Serial.println("Failed to read from IMU sensors.");
+    }
+}
+
+// Private helper function to calculate heading with tilt compensation
+static float getTiltCompensatedHeading(sensors_event_t* accel_event, sensors_event_t* mag_event) {
+    // Get accelerometer readings
+    float ax = accel_event->acceleration.x;
+    float ay = accel_event->acceleration.y;
+    float az = accel_event->acceleration.z;
+
+    // Calculate roll and pitch
+    float roll = atan2(ay, az);
+    float pitch = atan2(-ax, sqrt(ay * ay + az * az));
+
+    // Get magnetometer readings
+    float mx = mag_event->magnetic.x;
+    float my = mag_event->magnetic.y;
+    float mz = mag_event->magnetic.z;
+    
+    // Apply tilt compensation
+    float xh = mx * cos(pitch) + my * sin(roll) * sin(pitch) - mz * cos(roll) * sin(pitch);
+    float yh = my * cos(roll) + mz * sin(roll);
+
+    // Calculate heading in radians
+    float heading_rad = atan2(yh, xh);
+
+    // Convert heading to degrees
+    float heading_deg = heading_rad * 180.0 / PI;
+
+    // Normalize to 0-360
+    if (heading_deg < 0) {
+        heading_deg += 360;
+    }
+    
+    return heading_deg;
+}

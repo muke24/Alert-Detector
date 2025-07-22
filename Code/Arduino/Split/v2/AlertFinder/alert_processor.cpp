@@ -1,23 +1,25 @@
-// alert_processor.cpp (Corrected)
 #include "alert_processor.h"
 #include "config.h"
 #include "global_types.h"
-#include "esp32_comm.h" // Will be created next, used for sending data
 
 void processAlerts() {
-    if (alertCount == 0 || !bnoInitialized) {
-        if (alertCount == 0) Serial.println("Processing: No alerts in the area.");
-        if (!bnoInitialized) Serial.println("Processing: IMU not ready.");
+    // We only stop if there are no alerts. We proceed even if the IMU is not ready.
+    if (alertCount == 0) {
+        Serial.println("Processing: No alerts in the area.");
         
         closestIndex = -1;
         
-        // Safely update the multiplier even when there are no alerts
-        taskENTER_CRITICAL(&timerMux); // <<< FIX: Pass mutex argument
+        taskENTER_CRITICAL(&timerMux);
         multiplier = 1.0f;
-        taskEXIT_CRITICAL(&timerMux);  // <<< FIX: Pass mutex argument
+        alertAngle = 999.0f; // Set sentinel value for "no alert"
+        taskEXIT_CRITICAL(&timerMux);
         
-        sendDataToDisplay(999.0f); // Send "no alert" signal
         return;
+    }
+
+    // Add a log if the IMU is not initialized, but don't stop.
+    if (!imuInitialized) {
+        Serial.println("Processing with default heading (0 North) as IMU is not ready.");
     }
 
     int foundPoliceIndex = -1;
@@ -35,15 +37,15 @@ void processAlerts() {
     }
 
     if (foundPoliceIndex >= 0) {
-        closestIndex = foundPoliceIndex; // Update global state
+        closestIndex = foundPoliceIndex;
         Alert& alert = currentAlerts[closestIndex];
-
-        float relativeAngle = calculateFacingDirection(alert);
+        // This will now use currentDirection (defaulting to 0.0f if IMU is offline)
+        float relativeAngle = calculateFacingDirection(alert); 
         
-        // Safely update the volatile multiplier for the LED task
-        taskENTER_CRITICAL(&timerMux); // <<< FIX: Pass mutex argument
+        taskENTER_CRITICAL(&timerMux);
         multiplier = calculateMultiplier(minDistance);
-        taskEXIT_CRITICAL(&timerMux);  // <<< FIX: Pass mutex argument
+        alertAngle = relativeAngle;
+        taskEXIT_CRITICAL(&timerMux);
 
         Serial.println("Closest Police Alert Found:");
         Serial.println("  Type: " + alert.type + ", Subtype: " + alert.subtype);
@@ -52,24 +54,18 @@ void processAlerts() {
         Serial.println("  Relative Angle: " + String(relativeAngle, 1) + "° (0° is ahead)");
         Serial.println("  LED Multiplier: " + String(multiplier, 2));
 
-        // Send the final relative angle to the display ESP32
-        sendDataToDisplay(relativeAngle);
-
     } else {
         Serial.println("Processing: No police alerts found in the current data.");
         closestIndex = -1;
         
-        taskENTER_CRITICAL(&timerMux); // <<< FIX: Pass mutex argument
+        taskENTER_CRITICAL(&timerMux);
         multiplier = 1.0f;
-        taskEXIT_CRITICAL(&timerMux);  // <<< FIX: Pass mutex argument
-
-        sendDataToDisplay(999.0f); // Send "no alert" signal
+        alertAngle = 999.0f;
+        taskEXIT_CRITICAL(&timerMux);
     }
 }
 
-
 // --- Utility Function Implementations ---
-// (No changes in this section)
 
 BoundingArea boundingBox(Location location, float distanceInKm) {
     float latInRadians = location.latitude * PI / 180.0;
