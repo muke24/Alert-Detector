@@ -322,6 +322,8 @@ static void arrow_draw_cb(lv_event_t *e) {
   }
 }
 
+int current_heat_level = 0;
+
 /**
  * @brief Sets the heat level by animating the fill of the bottom arcs like a progress bar.
  * @param heatLevel The heat level (0 to 5).
@@ -329,12 +331,32 @@ static void arrow_draw_cb(lv_event_t *e) {
 void setHeat(int heatLevel) {
   if (heatLevel < 0) heatLevel = 0;
   if (heatLevel > 5) heatLevel = 5;
+
+  int prev_heat_level = current_heat_level;
+  current_heat_level = heatLevel;
+
+  int delta = abs(heatLevel - prev_heat_level);
+  if (delta == 0) return;
+
+  int base_anim_time = 500; // ms for single arc change
+  int anim_time = base_anim_time / delta;
+
   for (int i = 0; i < 5; i++) {
-int target_value = (i < heatLevel) ? 100 : 0;
+    int target_value = (i < heatLevel) ? 100 : 0;
     int current_value = lv_arc_get_value(bottom_arcs[i]);
     if (current_value != target_value) {
       // Stop any ongoing value animation on this arc
       lv_anim_del(bottom_arcs[i], (lv_anim_exec_xcb_t)lv_arc_set_value);
+
+      // Calculate delay based on direction
+      uint32_t delay = 0;
+      if (heatLevel > prev_heat_level) {
+        // Increasing: lower arcs first (smaller i first)
+        delay = (i - prev_heat_level) * anim_time;
+      } else if (heatLevel < prev_heat_level) {
+        // Decreasing: higher arcs first (larger i first)
+        delay = (prev_heat_level - 1 - i) * anim_time;
+      }
 
       // Create new animation
       lv_anim_t a;
@@ -343,7 +365,8 @@ int target_value = (i < heatLevel) ? 100 : 0;
       lv_anim_set_values(&a, current_value, target_value);
       lv_anim_set_exec_cb(&a, (lv_anim_exec_xcb_t)lv_arc_set_value);
       lv_anim_set_path_cb(&a, lv_anim_path_ease_in_out);
-      lv_anim_set_time(&a, 500);  // 500ms animation duration
+      lv_anim_set_time(&a, anim_time);
+      lv_anim_set_delay(&a, delay);
       lv_anim_start(&a);
 
       // Ensure flat ends are maintained during animation
