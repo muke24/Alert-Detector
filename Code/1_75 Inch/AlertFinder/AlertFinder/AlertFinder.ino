@@ -71,9 +71,9 @@ Arduino_GFX *gfx = new Arduino_CO5300(
 );
 
 // Global colors for bottom arcs
-lv_color_t palette_heat_off;
-lv_color_t palette_heat_on;
+lv_color_t palette_dark_grey;
 lv_color_t palette_light_grey;
+lv_color_t palette_heat_on;
 
 // Global orientation flag (0: normal, 1: flipped 180 degrees)
 int orientation = 0;
@@ -323,15 +323,33 @@ static void arrow_draw_cb(lv_event_t *e) {
 }
 
 /**
- * @brief Sets the heat level by changing the color of the bottom arcs.
+ * @brief Sets the heat level by animating the fill of the bottom arcs like a progress bar.
  * @param heatLevel The heat level (0 to 5).
  */
 void setHeat(int heatLevel) {
   if (heatLevel < 0) heatLevel = 0;
   if (heatLevel > 5) heatLevel = 5;
   for (int i = 0; i < 5; i++) {
-    lv_color_t color = (i < heatLevel) ? palette_heat_on : palette_light_grey;
-    lv_obj_set_style_arc_color(bottom_arcs[i], color, LV_PART_INDICATOR);
+int target_value = (i < heatLevel) ? 100 : 0;
+    int current_value = lv_arc_get_value(bottom_arcs[i]);
+    if (current_value != target_value) {
+      // Stop any ongoing value animation on this arc
+      lv_anim_del(bottom_arcs[i], (lv_anim_exec_xcb_t)lv_arc_set_value);
+
+      // Create new animation
+      lv_anim_t a;
+      lv_anim_init(&a);
+      lv_anim_set_var(&a, bottom_arcs[i]);
+      lv_anim_set_values(&a, current_value, target_value);
+      lv_anim_set_exec_cb(&a, (lv_anim_exec_xcb_t)lv_arc_set_value);
+      lv_anim_set_path_cb(&a, lv_anim_path_ease_in_out);
+      lv_anim_set_time(&a, 500);  // 500ms animation duration
+      lv_anim_start(&a);
+
+      // Ensure flat ends are maintained during animation
+      lv_obj_set_style_arc_rounded(bottom_arcs[i], false, LV_PART_INDICATOR);
+      lv_obj_set_style_arc_rounded(bottom_arcs[i], false, LV_PART_MAIN);
+    }
   }
 }
 
@@ -564,7 +582,7 @@ void create_arc_gui() {
   lv_color_t palette_dark_green = lv_color_make(55, 107, 0);
   lv_color_t palette_green = lv_color_make(128, 255, 0);
   palette_light_grey = lv_color_make(30, 30, 30);  // New color for bottom arcs
-  palette_heat_off = lv_color_make(20, 20, 20);    // New color for bottom arcs
+  palette_dark_grey = lv_color_make(20, 20, 20);   // New color for bottom arcs
   palette_heat_on = lv_color_make(255, 106, 0);    // Only for use later when logic is added for bottom arcs
 
   // Get the active screen object
@@ -589,7 +607,7 @@ void create_arc_gui() {
   lv_obj_clear_flag(arc4, LV_OBJ_FLAG_CLICKABLE);
   lv_obj_set_style_arc_color(arc4, lv_color_black(), LV_PART_MAIN);
   lv_obj_set_style_arc_opa(arc4, LV_OPA_COVER, LV_PART_MAIN);
-  lv_obj_set_style_arc_color(arc4, palette_heat_off, LV_PART_INDICATOR);
+  lv_obj_set_style_arc_color(arc4, palette_dark_grey, LV_PART_INDICATOR);
   lv_obj_set_style_arc_opa(arc4, LV_OPA_COVER, LV_PART_INDICATOR);
   lv_obj_set_style_arc_width(arc4, 168, LV_PART_INDICATOR);
   lv_obj_set_style_arc_rounded(arc4, false, LV_PART_INDICATOR);
@@ -668,16 +686,17 @@ void create_arc_gui() {
     lv_obj_set_size(arc, 466, 466);
     lv_obj_align(arc, LV_ALIGN_CENTER, 0, 0);
     lv_arc_set_range(arc, 0, 100);
-    lv_arc_set_value(arc, 100);
     lv_obj_remove_style(arc, NULL, LV_PART_KNOB);
     lv_obj_clear_flag(arc, LV_OBJ_FLAG_CLICKABLE);
-    lv_obj_set_style_arc_color(arc, lv_color_black(), LV_PART_MAIN);
+    lv_obj_set_style_arc_color(arc, palette_light_grey, LV_PART_MAIN);
     lv_obj_set_style_arc_opa(arc, LV_OPA_COVER, LV_PART_MAIN);
-    lv_obj_set_style_arc_color(arc, palette_light_grey, LV_PART_INDICATOR);
+    lv_obj_set_style_arc_width(arc, 25, LV_PART_MAIN);
+    lv_obj_set_style_arc_rounded(arc, false, LV_PART_MAIN);  // Ensure flat ends for background
+    lv_obj_set_style_arc_color(arc, palette_heat_on, LV_PART_INDICATOR);
     lv_obj_set_style_arc_opa(arc, LV_OPA_COVER, LV_PART_INDICATOR);
     lv_obj_set_style_arc_width(arc, 25, LV_PART_INDICATOR);
-    lv_obj_set_style_arc_rounded(arc, false, LV_PART_INDICATOR);
-    lv_obj_set_style_arc_width(arc, 0, LV_PART_MAIN);
+    lv_obj_set_style_arc_rounded(arc, false, LV_PART_INDICATOR);  // Ensure flat ends for indicator
+    lv_arc_set_value(arc, 0);  // Start with value 0 (light grey)
     bottom_arcs[i] = arc;
   }
 
@@ -801,7 +820,7 @@ void setup() {
   setHeat(4);
 
   // Set distance text
-  updateDistance(1333);
+  updateDistance(666);
 
   // Set initial arrow angle
   updateAngle(0);
@@ -821,10 +840,11 @@ void loop() {
   static int alertCount = 0;
   if (millis() - last_angle_update > 2000) {  // Update every second
     last_angle_update = millis();
-    demo_angle = (demo_angle + 45) % 360;  // Move by 45 degrees
+    demo_angle = (demo_angle + 40) % 360;  // Move by 40 degrees
     USBSerial.printf("Setting target angle to: %d\n", demo_angle);
     updateAngle(demo_angle);
     alertCount++;
+    setHeat(alertCount);
     if (alertCount == 0) {
       updateAlerts(-1, -1, -1, -1, -1);
     } else if (alertCount == 1) {
