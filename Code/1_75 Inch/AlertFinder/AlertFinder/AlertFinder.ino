@@ -2,10 +2,10 @@
  * @file      AlertFinder.ino
  * @author    Peter Thompson
  * @brief     A simple GUI for the Waveshare 1.75" Round AMOLED Touch display,
- * showing three arcs and a rotating arrow.
+ * showing three arcs, a rotating arrow, and images positioned along an arc.
  * (LVGL 8.4.0 API).
- * @version   2.11
- * @date      2025-07-23
+ * @version   2.17
+ * @date      2025-07-25
  *
  * @copyright Copyright (c) 2025
  *
@@ -20,6 +20,8 @@
 #include "TouchDrvCSTXXX.hpp"     // Touch controller driver
 #include "HWCDC.h"                // For USB Serial communication
 #include <esp_heap_caps.h>
+#include <math.h>
+#include "police.c"               // Include the image data file
 
 // The USBSerial object is defined in the core library, so we don't define it here.
 // HWCDC USBSerial; // <-- This line was removed to fix the "multiple definition" linker error.
@@ -40,6 +42,7 @@ int16_t touch_x[5], touch_y[5];
 
 // Arrow-related objects
 lv_obj_t *arrow_img;      // Object for the arrow
+lv_obj_t *distance_label; // Global label for distance text
 
 // Angle variables for smooth interpolation
 static float target_angle = 0;
@@ -62,6 +65,14 @@ Arduino_GFX *gfx = new Arduino_CO5300(
   0 /* col_offset2 */,
   0 /* row_offset2 */
 );
+
+// Global colors for bottom arcs
+lv_color_t palette_heat_off;
+lv_color_t palette_heat_on;
+lv_color_t palette_light_grey;
+
+// Global array for bottom arcs
+lv_obj_t *bottom_arcs[5];
 
 /* LVGL log function */
 #if LV_USE_LOG != 0
@@ -120,7 +131,7 @@ static void screen_event_cb(lv_event_t *e) {
  * @param timer Pointer to the LVGL timer.
  */
 static void arrow_update_timer(lv_timer_t *timer) {
-  const float smoothing_factor = 0.1;  // Adjust for desired smoothness (0.1 = smoother, 0.5 = faster)
+  const float smoothing_factor = 0.5;  // Increased for snappier response (less lag)
 
   // Increment target angle
   target_angle += 10;  // 1 degree per 10ms
@@ -140,38 +151,45 @@ static void arrow_update_timer(lv_timer_t *timer) {
 
   lv_obj_set_user_data(arrow_img, (void *)(intptr_t)(int16_t)current_angle);  // Store current angle
   lv_obj_invalidate(arrow_img);  // Force redraw
+
+  // FPS logging (timer fires, not rendered frames—use on-screen perf monitor for real FPS)
+  static uint32_t frame_count = 0;
+  static uint32_t last_millis = 0;
+  frame_count++;
+  if (millis() - last_millis >= 1000) {
+    USBSerial.printf("Timer FPS: %d\n", frame_count);
+    frame_count = 0;
+    last_millis = millis();
+  }
 }
 
 // Base stem points (quad: left head, right head, base right, base left; counter-clockwise)
 // (Bottom half of arrow, scaled to 90% of original size)
 static lv_point_t base_stem[4] = {
-  { -38, 14 },  // {-42 * 0.9, 15 * 0.9}
-  { 36, 14 },   // {40 * 0.9, 15 * 0.9}
-  { 9, 111 },   // {10 * 0.9, 123 * 0.9}
-  { -11, 111 }  // {-12 * 0.9, 123 * 0.9}
+  { -38, 11 },  // Top left point of arrow stem
+  { 36, 11 },   // Top right point of arrow stem
+  { 9, 111 },   // Bottom right point of arrow stem
+  { -11, 111 }  // Bottom left point of arrow stem
 };
-
+// Outline stem points (offset 3 pixels outward from centroid {-1, 62.5})
+static lv_point_t outline_stem[4] = {
+  { -40, 9 },  // Top left point of arrow stem outline
+  { 38, 9 },   // Bottom right point of arrow stem outline
+  { 10, 114 },  // Bottom right point of arrow stem outline
+  { -12, 114 }  // Bottom left point of arrow stem outline
+};
 // Base head points (triangle: left head, tip, right head; counter-clockwise)
 // (Top half of arrow, scaled to 90% of original size)
 static lv_point_t base_head[3] = {
-  { -74, 23 },  // {-82 * 0.9, 25 * 0.9}
-  { 0, -113 },  // {0 * 0.9, -125 * 0.9}
-  { 72, 23 }    // {80 * 0.9, 25 * 0.9}
+  { -74, 21 },  // Bottom left point of arrow head
+  { 0, -119 },  // Tip of arrow head
+  { 72, 21 }    // Bottom right point of arrow head
 };
-
-// Outline stem points (offset 3 pixels outward from centroid {-1, 62.5})
-static lv_point_t outline_stem[4] = {
-  { -40, 12 },  // Offset from {-38, 14}
-  { 38, 12 },   // Offset from {36, 14}
-  { 10, 114 },  // Offset from {9, 111}
-  { -12, 114 }  // Offset from {-11, 111}
-};
-
 // Outline head points (offset 3 pixels outward from centroid {-0.67, -22.33})
 static lv_point_t outline_head[3] = {
-  { -77, 25 },  // Offset from {-74, 23}
-  { 0, -116 },  // Offset from {0, -113}
-  { 75, 25 }    // Offset from {72, 23}
+  { -77, 23 },  // Bottom left point of arrow head outline
+  { 0, -122 },  // Tip of arrow head outline
+  { 75, 23 }    // Bottom right point of arrow head outline
 };
 
 // Custom draw callback (moved outside for compilation)
@@ -257,13 +275,53 @@ static void arrow_draw_cb(lv_event_t *e) {
 }
 
 /**
- * @brief Creates the GUI with three concentric semi-circle arcs and a rotating arrow.
+ * @brief Sets the heat level by changing the color of the bottom arcs.
+ * @param heatLevel The heat level (0 to 5).
+ */
+void setHeat(int heatLevel) {
+  if (heatLevel < 0) heatLevel = 0;
+  if (heatLevel > 5) heatLevel = 5;
+  for (int i = 0; i < 5; i++) {
+    lv_color_t color = (i < heatLevel) ? palette_heat_on : palette_light_grey;
+    lv_obj_set_style_arc_color(bottom_arcs[i], color, LV_PART_INDICATOR);
+  }
+}
+
+/**
+ * @brief Updates the distance text based on the input meters, rounded to the nearest 50 meters.
+ * @param meters The distance in meters.
+ */
+void updateDistance(int meters) {
+  // Round to nearest 50 meters
+  int rounded_meters = round(meters / 50.0) * 50;
+  
+  // Buffer to hold the formatted string
+  char distance_text[16];
+  
+  if (rounded_meters < 1000) {
+    // Format as meters (e.g., "650m")
+    snprintf(distance_text, sizeof(distance_text), "%dm", rounded_meters);
+  } else {
+    // Convert to kilometers and format to 2 decimal places (e.g., "1.25km")
+    float kilometers = rounded_meters / 1000.0f;
+    snprintf(distance_text, sizeof(distance_text), "%.2fkm", kilometers);
+  }
+  
+  // Update the label text
+  lv_label_set_text(distance_label, distance_text);
+}
+
+/**
+ * @brief Creates the GUI with three concentric semi-circle arcs, a rotating arrow, and images positioned along an arc.
  * Updated to use LVGL v8 styling API and style from reference script.
  */
 void create_arc_gui() {
   // Define custom colors from the reference script
-  lv_color_t palette_dark_green = lv_color_make(100, 193, 0);
+  lv_color_t palette_dark_green = lv_color_make(55, 107, 0);
   lv_color_t palette_green = lv_color_make(128, 255, 0);
+  palette_light_grey = lv_color_make(30, 30, 30);  // New color for bottom arcs
+  palette_heat_off = lv_color_make(20, 20, 20);  // New color for bottom arcs
+  palette_heat_on = lv_color_make(255, 106, 0);  // Only for use later when logic is added for bottom arcs
 
   // Get the active screen object
   lv_obj_t *scr = lv_scr_act();
@@ -274,6 +332,76 @@ void create_arc_gui() {
 
   // Add a global event callback to the screen to capture all clicks
   lv_obj_add_event_cb(scr, screen_event_cb, LV_EVENT_ALL, NULL);
+
+  // Background Arcs on bottom half of screen
+  // --- Arc 4 (Inner) ---
+  lv_obj_t *arc4 = lv_arc_create(scr);
+  lv_obj_set_size(arc4, 336, 336);
+  lv_obj_align(arc4, LV_ALIGN_CENTER, 0, 0);
+  lv_arc_set_bg_angles(arc4, 0, 180);
+  lv_arc_set_range(arc4, -90, 90);
+  lv_arc_set_value(arc4, 90);
+
+  // Style the arc
+  lv_obj_remove_style(arc4, NULL, LV_PART_KNOB);
+  lv_obj_clear_flag(arc4, LV_OBJ_FLAG_CLICKABLE);  // Make it non-interactive
+  lv_obj_set_style_arc_color(arc4, lv_color_black(), LV_PART_MAIN);
+  lv_obj_set_style_arc_opa(arc4, LV_OPA_COVER, LV_PART_MAIN);
+  lv_obj_set_style_arc_color(arc4, palette_heat_off, LV_PART_INDICATOR);
+  lv_obj_set_style_arc_opa(arc4, LV_OPA_COVER, LV_PART_INDICATOR);
+  // Set width to radius (336 / 2 = 168) to create a solid semi-circle
+  lv_obj_set_style_arc_width(arc4, 168, LV_PART_INDICATOR);
+  lv_obj_set_style_arc_rounded(arc4, false, LV_PART_INDICATOR);
+  lv_obj_set_style_arc_width(arc4, 0, LV_PART_MAIN);  // Disable background arc
+
+  // --- Arc 5 (Middle) ---
+  lv_obj_t *arc5 = lv_arc_create(scr);
+  lv_obj_set_size(arc5, 355, 355);
+  lv_obj_align(arc5, LV_ALIGN_CENTER, 0, 0);
+  lv_arc_set_bg_angles(arc5, 0, 180);
+  lv_arc_set_range(arc5, -90, 90);  // Use a 0-180 range to be explicit
+  lv_arc_set_value(arc5, 90);     // Set to max to ensure it's a full semi-circle
+
+  // Style the arc
+  lv_obj_remove_style(arc5, NULL, LV_PART_KNOB);
+  lv_obj_clear_flag(arc5, LV_OBJ_FLAG_CLICKABLE);  // Make it non-interactive
+  lv_obj_set_style_arc_color(arc5, lv_color_black(), LV_PART_MAIN);
+  lv_obj_set_style_arc_opa(arc5, LV_OPA_COVER, LV_PART_MAIN);
+  lv_obj_set_style_arc_color(arc5, palette_light_grey, LV_PART_INDICATOR);
+  lv_obj_set_style_arc_opa(arc5, LV_OPA_COVER, LV_PART_INDICATOR);
+  lv_obj_set_style_arc_width(arc5, 60, LV_PART_INDICATOR);  // Increased thickness
+  lv_obj_set_style_arc_rounded(arc5, false, LV_PART_INDICATOR);
+  lv_obj_set_style_arc_width(arc5, 0, LV_PART_MAIN);  // Disable background arc
+
+  // TODO: 
+  // - Make start and end angle change depending on how many images there are (so that an even amount of images are centered).
+  // - Fix start and end angle so that they are below the arcs at the top and so the images (police img ect.) do not clip with them
+  //
+  // --- Images positioned along an arc in the bottom half (created first to be below other UI) ---
+  const int num_positions = 5;  // Set amount of positions for images
+  float image_arc_r = 150.0f;  // Smaller radius to avoid covering UI elements
+  float start_angle = 90.0f;   // Start at 36° to center the 108° arc
+  float end_angle = 0.0f;    // End at 144° (108° span, centered in bottom half)
+  float spacing = (end_angle - start_angle) / (num_positions + 1);  // Tighter spacing
+  int center_x = 233;
+  int center_y = 233;
+  int img_size = 80;  // Image size 80x80
+
+  for (int i = 0; i < num_positions; i++) {
+    float angle = start_angle + (i + 1) * spacing;  // Shift towards middle
+    // Calculate position for the center of the image
+    int32_t img_x = center_x + (int32_t)roundf(image_arc_r * lv_trigo_cos((int32_t)roundf(angle) * 10) / LV_TRIGO_SIN_MAX);
+    int32_t img_y = center_y + (int32_t)roundf(image_arc_r * lv_trigo_sin((int32_t)roundf(angle) * 10) / LV_TRIGO_SIN_MAX);
+
+    if (i == 2) {  // Place the police image at the center position (bottom center)
+      lv_obj_t *policeImg = lv_img_create(scr);
+      lv_img_set_src(policeImg, &police);
+      lv_obj_set_pos(policeImg, img_x - (img_size / 2), img_y - (img_size / 2));
+      lv_obj_set_size(policeImg, img_size, img_size);
+    }
+    // To add more images later, duplicate the if block for other i values (0 to 4),
+    // create new lv_img_create, set different src, and use the same pos calculation.
+  }
 
   // --- Arc 3 (Inner) ---
   lv_obj_t *arc3 = lv_arc_create(scr);
@@ -293,10 +421,11 @@ void create_arc_gui() {
   // Set width to radius (336 / 2 = 168) to create a solid semi-circle
   lv_obj_set_style_arc_width(arc3, 168, LV_PART_INDICATOR);
   lv_obj_set_style_arc_rounded(arc3, false, LV_PART_INDICATOR);
+  lv_obj_set_style_arc_width(arc3, 0, LV_PART_MAIN);  // Disable background arc
 
   // --- Arc 2 (Middle) ---
   lv_obj_t *arc2 = lv_arc_create(scr);
-  lv_obj_set_size(arc2, 386, 386);
+  lv_obj_set_size(arc2, 355, 355);
   lv_obj_align(arc2, LV_ALIGN_CENTER, 0, 0);
   lv_arc_set_bg_angles(arc2, 180, 0);
   lv_arc_set_range(arc2, 0, 180);  // Use a 0-180 range to be explicit
@@ -309,12 +438,13 @@ void create_arc_gui() {
   lv_obj_set_style_arc_opa(arc2, LV_OPA_COVER, LV_PART_MAIN);
   lv_obj_set_style_arc_color(arc2, palette_green, LV_PART_INDICATOR);
   lv_obj_set_style_arc_opa(arc2, LV_OPA_COVER, LV_PART_INDICATOR);
-  lv_obj_set_style_arc_width(arc2, 50, LV_PART_INDICATOR);  // Increased thickness
+  lv_obj_set_style_arc_width(arc2, 60, LV_PART_INDICATOR);  // Increased thickness
   lv_obj_set_style_arc_rounded(arc2, false, LV_PART_INDICATOR);
+  lv_obj_set_style_arc_width(arc2, 0, LV_PART_MAIN);  // Disable background arc
 
   // --- Arc 1 (Outer) ---
   lv_obj_t *arc1 = lv_arc_create(scr);
-  lv_obj_set_size(arc1, 441, 441);
+  lv_obj_set_size(arc1, 466, 466);
   lv_obj_align(arc1, LV_ALIGN_CENTER, 0, 0);
   lv_arc_set_bg_angles(arc1, 180, 0);  // Draws the top half
   lv_arc_set_range(arc1, -90, 90);
@@ -327,8 +457,47 @@ void create_arc_gui() {
   lv_obj_set_style_arc_opa(arc1, LV_OPA_COVER, LV_PART_MAIN);
   lv_obj_set_style_arc_color(arc1, palette_dark_green, LV_PART_INDICATOR);
   lv_obj_set_style_arc_opa(arc1, LV_OPA_COVER, LV_PART_INDICATOR);
-  lv_obj_set_style_arc_width(arc1, 15, LV_PART_INDICATOR);
+  lv_obj_set_style_arc_width(arc1, 25, LV_PART_INDICATOR);
   lv_obj_set_style_arc_rounded(arc1, false, LV_PART_INDICATOR);  // Sharp ends
+  lv_obj_set_style_arc_width(arc1, 0, LV_PART_MAIN);  // Disable background arc
+
+  // --- Additional 5 arcs on the opposite side (top, facing opposite to Arc 1) ---
+  #define PI 3.1415926535f
+  float r = 466 / 2.0f;  // Outer radius approximation
+  float gap_px = 25.0f;
+  float angle_gap = (gap_px / r) * (180.0f / PI);  // In degrees
+  int num_arcs = 5;
+  float total_gaps = (num_arcs - 1) * angle_gap;
+  float total_arcs_angle = 180.0f - total_gaps;
+  float each_arc_angle = total_arcs_angle / num_arcs;
+
+  float current_start = 0.0f;  // Start at 0° for the top semi-circle
+  for (int i = 0; i < num_arcs; i++) {
+    lv_obj_t *arc = lv_arc_create(scr);
+    lv_obj_set_size(arc, 466, 466);
+    lv_obj_align(arc, LV_ALIGN_CENTER, 0, 0);
+
+    float current_end = current_start + each_arc_angle;
+
+    lv_arc_set_bg_angles(arc, (uint16_t)roundf(current_start), (uint16_t)roundf(current_end));
+    lv_arc_set_range(arc, 0, 100);
+    lv_arc_set_value(arc, 100);
+
+    // Style same as Arc 1 but with new orange color
+    lv_obj_remove_style(arc, NULL, LV_PART_KNOB);
+    lv_obj_clear_flag(arc, LV_OBJ_FLAG_CLICKABLE);
+    lv_obj_set_style_arc_color(arc, lv_color_black(), LV_PART_MAIN);
+    lv_obj_set_style_arc_opa(arc, LV_OPA_COVER, LV_PART_MAIN);
+    lv_obj_set_style_arc_color(arc, palette_light_grey, LV_PART_INDICATOR);
+    lv_obj_set_style_arc_opa(arc, LV_OPA_COVER, LV_PART_INDICATOR);
+    lv_obj_set_style_arc_width(arc, 25, LV_PART_INDICATOR);
+    lv_obj_set_style_arc_rounded(arc, false, LV_PART_INDICATOR);
+    lv_obj_set_style_arc_width(arc, 0, LV_PART_MAIN);  // Disable background arc
+
+    bottom_arcs[i] = arc;
+
+    current_start = current_end + angle_gap;
+  }
 
   // --- Arrow (Drawn directly with rotated polygon) ---
   // Create a container object for the arrow to allow easy styling and positioning
@@ -342,10 +511,20 @@ void create_arc_gui() {
 
   lv_obj_add_event_cb(arrow_img, arrow_draw_cb, LV_EVENT_DRAW_MAIN, NULL);
   lv_obj_set_user_data(arrow_img, (void *)(intptr_t)0);  // Initial angle
+
+  // Add text below the arrow
+  distance_label = lv_label_create(scr);
+  lv_label_set_text(distance_label, "200m");
+  lv_obj_set_style_text_color(distance_label, lv_color_white(), LV_PART_MAIN);
+  lv_obj_set_style_text_font(distance_label, &lv_font_montserrat_48, LV_PART_MAIN);
+  lv_obj_align(distance_label, LV_ALIGN_CENTER, 0, 50);
 }
 
 void setup() {
   USBSerial.begin(115200);
+
+  // Set CPU frequency to maximum for better performance
+  setCpuFrequencyMhz(240);
 
   // Initialize I2C for the touch controller
   Wire.begin(IIC_SDA, IIC_SCL);
@@ -372,10 +551,31 @@ void setup() {
   lv_log_register_print_cb(my_print);
 #endif
 
-  // Allocate LVGL display buffers in DMA-capable memory
-  buf1 = (lv_color_t *)heap_caps_malloc(screenWidth * 40 * sizeof(lv_color_t), MALLOC_CAP_DMA);
-  buf2 = (lv_color_t *)heap_caps_malloc(screenWidth * 40 * sizeof(lv_color_t), MALLOC_CAP_DMA);
-  lv_disp_draw_buf_init(&draw_buf, buf1, buf2, screenWidth * 40);
+  // Allocate LVGL display buffers in DMA-capable internal memory
+  uint32_t buf_rows = 120;  // ~25% height for better perf (~224KB total, fits in ~297KB free internal heap)
+  buf1 = (lv_color_t *)heap_caps_malloc(screenWidth * buf_rows * sizeof(lv_color_t), MALLOC_CAP_DMA | MALLOC_CAP_INTERNAL);
+  buf2 = (lv_color_t *)heap_caps_malloc(screenWidth * buf_rows * sizeof(lv_color_t), MALLOC_CAP_DMA | MALLOC_CAP_INTERNAL);
+
+  // Check allocation and fallback if failed
+  if (buf1 == NULL || buf2 == NULL) {
+    USBSerial.println("Large internal buffer allocation failed! Falling back to minimal.");
+    buf_rows = 40;
+    if (buf1 == NULL) buf1 = (lv_color_t *)heap_caps_malloc(screenWidth * buf_rows * sizeof(lv_color_t), MALLOC_CAP_DMA | MALLOC_CAP_INTERNAL);
+    if (buf2 == NULL) buf2 = (lv_color_t *)heap_caps_malloc(screenWidth * buf_rows * sizeof(lv_color_t), MALLOC_CAP_DMA | MALLOC_CAP_INTERNAL);
+  }
+
+  // Final check: Halt if still failed (prevents crash)
+  if (buf1 == NULL || buf2 == NULL) {
+    USBSerial.println("Buffer allocation failed completely! Cannot proceed.");
+    while (1);  // Halt to avoid Guru Meditation crash
+  }
+
+  lv_disp_draw_buf_init(&draw_buf, buf1, buf2, screenWidth * buf_rows);
+
+  // Log heap info for debugging
+  USBSerial.printf("Buffer rows: %d, Buf1: %p, Buf2: %p\n", buf_rows, buf1, buf2);
+  USBSerial.printf("Free internal heap: %u bytes\n", heap_caps_get_free_size(MALLOC_CAP_INTERNAL));
+  USBSerial.printf("Free PSRAM heap: %u bytes\n", heap_caps_get_free_size(MALLOC_CAP_SPIRAM));
 
   // Initialize LVGL Display Driver
   static lv_disp_drv_t disp_drv;
@@ -405,6 +605,12 @@ void setup() {
   // --- Create the custom GUI ---
   create_arc_gui();
 
+  // Set initial heat level
+  setHeat(4);
+
+  // Set distance text
+  updateDistance(566);
+
   // Create a timer to update the arrow rotation
   lv_timer_create(arrow_update_timer, 10, NULL);  // Update every 10ms for smooth rotation
 
@@ -413,5 +619,5 @@ void setup() {
 
 void loop() {
   lv_timer_handler();  // Let the GUI do its work
-  delay(5);            // Yield to other tasks
+  delay(1);            // Minimal yield; adjust up if CPU overheats
 }
