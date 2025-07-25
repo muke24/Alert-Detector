@@ -338,7 +338,7 @@ void setHeat(int heatLevel) {
   int delta = abs(heatLevel - prev_heat_level);
   if (delta == 0) return;
 
-  int base_anim_time = 500; // ms for single arc change
+  int base_anim_time = 500;  // ms for single arc change
   int anim_time = base_anim_time / delta;
 
   for (int i = 0; i < 5; i++) {
@@ -381,23 +381,28 @@ void setHeat(int heatLevel) {
  * @param meters The distance in meters.
  */
 void updateDistance(int meters) {
-  // Round to nearest 50 meters
-  int rounded_meters = round(meters / 50.0) * 50;
+  if (meters != -1) {
+    // Round to nearest 50 meters
+    int rounded_meters = round(meters / 50.0) * 50;
 
-  // Buffer to hold the formatted string
-  char distance_text[16];
+    // Buffer to hold the formatted string
+    char distance_text[16];
 
-  if (rounded_meters < 1000) {
-    // Format as meters (e.g., "650m")
-    snprintf(distance_text, sizeof(distance_text), "%dm", rounded_meters);
+    if (rounded_meters < 1000) {
+      // Format as meters (e.g., "650m")
+      snprintf(distance_text, sizeof(distance_text), "%dm", rounded_meters);
+    } else {
+      // Convert to kilometers and format to 2 decimal places (e.g., "1.25km")
+      float kilometers = rounded_meters / 1000.0f;
+      snprintf(distance_text, sizeof(distance_text), "%.2fkm", kilometers);
+    }
+
+    // Update the label text
+    lv_label_set_text(distance_label, distance_text);
   } else {
-    // Convert to kilometers and format to 2 decimal places (e.g., "1.25km")
-    float kilometers = rounded_meters / 1000.0f;
-    snprintf(distance_text, sizeof(distance_text), "%.2fkm", kilometers);
+    // Update the label text
+    lv_label_set_text(distance_label, "");
   }
-
-  // Update the label text
-  lv_label_set_text(distance_label, distance_text);
 }
 
 /**
@@ -719,7 +724,7 @@ void create_arc_gui() {
     lv_obj_set_style_arc_opa(arc, LV_OPA_COVER, LV_PART_INDICATOR);
     lv_obj_set_style_arc_width(arc, 25, LV_PART_INDICATOR);
     lv_obj_set_style_arc_rounded(arc, false, LV_PART_INDICATOR);  // Ensure flat ends for indicator
-    lv_arc_set_value(arc, 0);  // Start with value 0 (light grey)
+    lv_arc_set_value(arc, 0);                                     // Start with value 0 (light grey)
     bottom_arcs[i] = arc;
   }
 
@@ -799,7 +804,8 @@ void setup() {
 
   if (buf1 == NULL || buf2 == NULL) {
     USBSerial.println("Buffer allocation failed completely! Cannot proceed.");
-    while (1);  // Halt
+    while (1)
+      ;  // Halt
   }
 
   lv_disp_draw_buf_init(&draw_buf, buf1, buf2, screenWidth * buf_rows);
@@ -859,27 +865,39 @@ void setup() {
 
 void loop() {
   static uint32_t last_angle_update = 0;
-  static int demo_angle = 0;
+  //static int demo_angle = 0;
   static int alertCount = 0;
   if (millis() - last_angle_update > 2000) {  // Update every second
     last_angle_update = millis();
-    demo_angle = (demo_angle + 40) % 360;  // Move by 40 degrees
-    USBSerial.printf("Setting target angle to: %d\n", demo_angle);
-    updateAngle(demo_angle);
+    //demo_angle = (demo_angle + 40) % 360;  // Move by 40 degrees
+    //USBSerial.printf("Setting target angle to: %d\n", demo_angle);
+
     alertCount++;
     setHeat(alertCount);
     if (alertCount == 0) {
       updateAlerts(-1, -1, -1, -1, -1);
+      updateAngle(179);
+      updateDistance(-1);
     } else if (alertCount == 1) {
       updateAlerts(0, -1, -1, -1, -1);
+      updateAngle(-90);
+      updateDistance(1111);
     } else if (alertCount == 2) {
       updateAlerts(0, 0, -1, -1, -1);
+      updateAngle(-30);
+      updateDistance(930);
     } else if (alertCount == 3) {
       updateAlerts(0, 0, 0, -1, -1);
+      updateAngle(0);
+      updateDistance(400);
     } else if (alertCount == 4) {
       updateAlerts(0, 0, 0, 0, -1);
+      updateAngle(45);
+      updateDistance(300);
     } else if (alertCount == 5) {
       updateAlerts(0, 0, 0, 0, 0);
+      updateAngle(75);
+      updateDistance(150);
       alertCount = -1;
     }
   }
