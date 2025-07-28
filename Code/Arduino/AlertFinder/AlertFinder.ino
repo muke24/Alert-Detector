@@ -1,4 +1,3 @@
-// Project: Alert Finder V1.0
 
 // PARTS (V1.0):
 // - LILYGO T-SIM7000G V1.1 ESP32 (this script runs on this device)
