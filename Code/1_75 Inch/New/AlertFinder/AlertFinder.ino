@@ -3,9 +3,9 @@
  * @author    Peter Thompson
  * @brief     Main application file for the Alert Finder project. This file
  * handles hardware initialization, Wi-Fi connectivity, and the main
- * program loop. It coordinates the AlertRetriever and AlertRenderer modules.
- * @version   3.20 (Demo Mode Added)
- * @date      2025-07-29
+ * program loop. It coordinates the GPS, AlertRetriever, and AlertRenderer modules.
+ * @version   3.35 (GPS Debugging)
+ * @date      2025-07-30
  *
  * @copyright Copyright (c) 2025
  *
@@ -32,13 +32,15 @@
 // --- Custom Application Modules ---
 #include "AlertRenderer.h"
 #include "AlertRetriever.h"
+#include "GPS.h"
+#include "Compass.h"
 
 // --- Wi-Fi Configuration ---
-const char* ssid = "YOUR_WIFI_SSID";
-const char* password = "YOUR_WIFI_PASSWORD";
+const char* ssid = "TelstraE6FB15";
+const char* password = "thebigtent";
 
 // --- Mode Configuration ---
-const bool DEMO_MODE = true; // Set to true to run UI demo, false for live data
+const bool DEMO_MODE = false; // Set to true to run UI demo, false for live data
 
 // --- Global Constants ---
 #define EXAMPLE_LVGL_TICK_PERIOD_MS 2
@@ -138,23 +140,10 @@ void setup() {
   USBSerial.begin(115200);
   USBSerial.println("AlertFinder starting...");
 
-  // --- Hardware Initialization ---
-  setCpuFrequencyMhz(240);
-  Wire.begin(IIC_SDA, IIC_SCL);
-  touch.setPins(-1, 11);
-  if (!touch.begin(Wire, 0x5A, IIC_SDA, IIC_SCL)) {
-    USBSerial.println("Failed to initialize touch controller!");
-  }
-  touch.setMaxCoordinates(LCD_WIDTH, LCD_HEIGHT);
-  touch.setMirrorXY(true, true);
-  gfx->begin();
-  gfx->Display_Brightness(200);
-  screenWidth = gfx->width();
-  screenHeight = gfx->height();
-
-  // --- Wi-Fi Initialization (only if not in demo mode) ---
+  // --- STAGE 1: CONNECT TO NETWORK ---
   if (!DEMO_MODE) {
     USBSerial.printf("Connecting to %s ", ssid);
+    WiFi.setSleep(false);
     WiFi.begin(ssid, password);
     while (WiFi.status() != WL_CONNECTED) {
       delay(500);
@@ -167,9 +156,34 @@ void setup() {
     USBSerial.println("DEMO_MODE is active. Skipping Wi-Fi connection.");
   }
 
+  // --- STAGE 2: INITIALIZE HARDWARE & GRAPHICS ---
+  setCpuFrequencyMhz(240);
+  Wire.begin(IIC_SDA, IIC_SCL); // Main I2C for Touch, QMI8658, HMC5883L
+  touch.setPins(-1, 11);
+  if (!touch.begin(Wire, 0x5A, IIC_SDA, IIC_SCL)) {
+    USBSerial.println("Failed to initialize touch controller!");
+  }
+  touch.setMaxCoordinates(LCD_WIDTH, LCD_HEIGHT);
+  touch.setMirrorXY(true, true);
+  gfx->begin();
+  gfx->Display_Brightness(200);
+  screenWidth = gfx->width();
+  screenHeight = gfx->height();
 
-  // --- LVGL Initialization ---
   renderer_init_lvgl();
+  create_arc_gui();
+  USBSerial.println("Display and LVGL initialized.");
+
+  // --- STAGE 3: INITIALIZE OTHER MODULES & TIMERS ---
+  gps_setup();
+  USBSerial.println("GPS module setup complete.");
+
+  if (!compass_setup()) {
+    USBSerial.println("Compass module initialization failed!");
+  } else {
+    USBSerial.println("Compass module setup complete.");
+  }
+
   const esp_timer_create_args_t lvgl_tick_timer_args = {
     .callback = &example_increase_lvgl_tick, .name = "lvgl_tick"
   };
@@ -177,8 +191,6 @@ void setup() {
   esp_timer_create(&lvgl_tick_timer_args, &lvgl_tick_timer);
   esp_timer_start_periodic(lvgl_tick_timer, EXAMPLE_LVGL_TICK_PERIOD_MS * 1000);
 
-  // --- Application Modules Initialization ---
-  create_arc_gui();
   if (!DEMO_MODE) {
     retriever_setup();
   }
@@ -243,19 +255,41 @@ void loop() {
       }
     }
   } else {
-    // --- Live Mode Logic: Use AlertRetriever ---
-    // 1. Update Module Inputs
-    set_current_location(-33.4731, 151.3420); // Static for now
-    set_current_direction(90.0);             // Static for now
-    set_network_status(WiFi.status() == WL_CONNECTED);
+    // --- Live Mode Logic ---
+    
+    // 1. Update sensor data
+    gps_loop();
+    compass_loop();
 
-    // 2. Run Module Loops
+    // --- SENSOR DEBUGGING ---
+    static unsigned long last_debug_print = 0;
+    if (millis() - last_debug_print > 2000) {
+        GPSData gps_data = get_gps_data();
+        if (gps_data.is_valid) {
+            USBSerial.printf("GPS FIX: Lat=%.6f, Lon=%.6f | ", gps_data.latitude, gps_data.longitude);
+        } else {
+            USBSerial.print("GPS: No fix | ");
+        }
+        USBSerial.printf("Compass Heading: %.2f | Orientation: %d\n", get_compass_heading(), get_orientation());
+        last_debug_print = millis();
+    }
+
+    // 2. Update Module Inputs with latest data
+    GPSData gps_data = get_gps_data();
+    if (gps_data.is_valid) {
+        set_current_location(gps_data.latitude, gps_data.longitude);
+    }
+    set_current_direction(get_compass_heading());
+    set_network_status(WiFi.status() == WL_CONNECTED);
+    setOrientation(get_orientation());
+
+    // 3. Run Retriever Loop
     retriever_loop();
 
-    // 3. Check for New Data and Update UI
+    // 4. Check for New Data from Retriever and Update UI
     DisplayData data = get_display_data();
     if (data.data_is_new) {
-      USBSerial.println("New display data received from retriever.");
+      USBSerial.printf("New data: H:%d, A:%.1f, D:%d\n", data.heat_level, data.target_angle, data.target_distance_m);
       updateAlerts(data.alert_indices[0], data.alert_indices[1], data.alert_indices[2], data.alert_indices[3], data.alert_indices[4]);
       setHeat(data.heat_level);
       updateAngle(data.target_angle);

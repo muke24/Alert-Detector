@@ -4,8 +4,8 @@
  * @brief     Implementation of the UI rendering and management logic for the
  * Alert Finder. This file contains all LVGL object creation,
  * styling, and animations.
- * @version   3.01 (Corrected)
- * @date      2025-07-29
+ * @version   1.28 (Dynamic Arc Color)
+ * @date      2025-07-30
  *
  * @copyright Copyright (c) 2025
  *
@@ -40,8 +40,12 @@ static float target_angle = 0;
 static float current_angle = 0;
 int orientation = 0; // 0: normal, 1: flipped
 int current_heat_level = 0;
+static bool snap_on_next_angle_update = false; // Flag for instant arrow rotation
 
 // --- UI Colors ---
+lv_color_t palette_dark_green;
+lv_color_t palette_green;
+lv_color_t palette_green_no_alerts;
 lv_color_t palette_dark_grey;
 lv_color_t palette_light_grey;
 lv_color_t palette_heat_on;
@@ -66,8 +70,8 @@ void renderer_init_lvgl() {
     lv_log_register_print_cb(my_print);
 #endif
 
-    // Allocate LVGL display buffers
-    uint32_t buf_rows = 120;
+    // Buffer size of 100 is the stable maximum for this hardware configuration.
+    uint32_t buf_rows = 100;
     buf1 = (lv_color_t *)heap_caps_malloc(screenWidth * buf_rows * sizeof(lv_color_t), MALLOC_CAP_DMA | MALLOC_CAP_INTERNAL);
     buf2 = (lv_color_t *)heap_caps_malloc(screenWidth * buf_rows * sizeof(lv_color_t), MALLOC_CAP_DMA | MALLOC_CAP_INTERNAL);
 
@@ -129,6 +133,16 @@ static void arrow_update_timer(lv_timer_t *timer) {
 
     lv_obj_set_user_data(arrow_img, (void *)(intptr_t)(int16_t)current_angle);
     lv_obj_invalidate(arrow_img);
+
+    // --- FPS Counter ---
+    static uint32_t frame_count = 0;
+    static uint32_t last_fps_check = 0;
+    frame_count++;
+    if (millis() - last_fps_check >= 1000) {
+        USBSerial.printf("UI FPS: %d\n", frame_count);
+        frame_count = 0;
+        last_fps_check = millis();
+    }
 }
 
 // --- Arrow Polygon Data ---
@@ -138,6 +152,11 @@ static lv_point_t base_head[3] = { { -74, 21 }, { 0, -119 }, { 72, 21 } };
 static lv_point_t outline_head[3] = { { -77, 23 }, { 0, -122 }, { 75, 23 } };
 
 static void arrow_draw_cb(lv_event_t *e) {
+    // If there are no active alerts (heat level is 0), don't draw the arrow.
+    if (current_heat_level == 0) {
+        return;
+    }
+
     lv_draw_ctx_t *draw_ctx = lv_event_get_draw_ctx(e);
     lv_obj_t *obj = lv_event_get_target(e);
     int16_t angle = (int16_t)(intptr_t)lv_obj_get_user_data(obj);
@@ -214,6 +233,13 @@ void setHeat(int heatLevel) {
     if (heatLevel < 0) heatLevel = 0;
     if (heatLevel > 5) heatLevel = 5;
 
+    // Update arc2 color based on alert status
+    if (heatLevel > 0) {
+        lv_obj_set_style_arc_color(arc2, palette_green, LV_PART_INDICATOR);
+    } else {
+        lv_obj_set_style_arc_color(arc2, palette_green_no_alerts, LV_PART_INDICATOR);
+    }
+
     int prev_heat_level = current_heat_level;
     current_heat_level = heatLevel;
     int delta = abs(heatLevel - prev_heat_level);
@@ -247,6 +273,17 @@ void setHeat(int heatLevel) {
 }
 
 void updateDistance(int meters) {
+    static int last_known_distance = -1;
+
+    // Check for snap condition:
+    // 1. A new alert has appeared (last was -1, current is not)
+    // 2. A new alert is closer than the previous one
+    if (meters != -1 && (last_known_distance == -1 || meters < last_known_distance)) {
+        snap_on_next_angle_update = true;
+    }
+
+    last_known_distance = meters;
+
     if (meters != -1) {
         int rounded_meters = round(meters / 50.0) * 50;
         char distance_text[16];
@@ -266,6 +303,11 @@ void updateAngle(int angle) {
     angle = angle % 360;
     if (angle < 0) angle += 360;
     target_angle = angle * 10;
+
+    if (snap_on_next_angle_update) {
+        current_angle = target_angle; // Snap current angle to target
+        snap_on_next_angle_update = false; // Reset the flag for the next update
+    }
 }
 
 void updateAlerts(int alertIndex0, int alertIndex1, int alertIndex2, int alertIndex3, int alertIndex4) {
@@ -392,8 +434,10 @@ void setOrientation(int ori) {
 }
 
 void create_arc_gui() {
-    lv_color_t palette_dark_green = lv_color_make(55, 107, 0);
-    lv_color_t palette_green = lv_color_make(128, 255, 0);
+    // Define all palette colors
+    palette_dark_green = lv_color_make(55, 107, 0);
+    palette_green = lv_color_make(128, 255, 0);
+    palette_green_no_alerts = lv_color_make(92, 181, 0); // Midpoint color
     palette_light_grey = lv_color_make(30, 30, 30);
     palette_dark_grey = lv_color_make(20, 20, 20);
     palette_heat_on = lv_color_make(255, 106, 0);
@@ -448,7 +492,7 @@ void create_arc_gui() {
     lv_arc_set_value(arc2, 180);
     lv_obj_remove_style(arc2, NULL, LV_PART_KNOB);
     lv_obj_clear_flag(arc2, LV_OBJ_FLAG_CLICKABLE);
-    lv_obj_set_style_arc_color(arc2, palette_green, LV_PART_INDICATOR);
+    lv_obj_set_style_arc_color(arc2, palette_green_no_alerts, LV_PART_INDICATOR); // Set initial color
     lv_obj_set_style_arc_width(arc2, 72, LV_PART_INDICATOR);
     lv_obj_set_style_arc_rounded(arc2, false, LV_PART_INDICATOR);
     lv_obj_set_style_arc_width(arc2, 0, LV_PART_MAIN);
