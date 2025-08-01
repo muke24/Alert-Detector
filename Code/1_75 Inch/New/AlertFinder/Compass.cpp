@@ -1,8 +1,8 @@
 /**
  * @file      Compass.cpp
  * @author    Peter Thompson
- * @brief     Implementation of the Compass module.
- * @version   1.90 (Final Saturation Fix)
+ * @brief     Implementation of the Compass module, now using LIS3MDL Magnetometer.
+ * @version   2.03 (Corrected Axis Remapping)
  * @date      2025-07-31
  *
  * @copyright Copyright (c) 2025
@@ -12,15 +12,16 @@
 #include "Compass.h"
 #include <Wire.h>
 #include "SensorQMI8658.hpp"
-// Using the correct Adafruit library for the HMC5883L sensor at address 0x1E
-#include <Adafruit_HMC5883_U.h>
+// Using the Adafruit LIS3MDL library for the new magnetometer.
+#include <Adafruit_LIS3MDL.h>
 #include <Adafruit_Sensor.h>
 #include "MadgwickAHRS.h"
 #include "HWCDC.h" // For USBSerial printing
 
 // --- Sensor Objects ---
 static SensorQMI8658 qmi;
-static Adafruit_HMC5883_Unified mag = Adafruit_HMC5883_Unified(12345);
+// Instantiate the LIS3MDL sensor object.
+static Adafruit_LIS3MDL mag;
 static Madgwick filter;
 
 // --- Module State ---
@@ -31,7 +32,6 @@ static int orientation = 0; // 0 = normal, 1 = flipped
 
 // Magnetic declination for Springfield, NSW, Australia (approximate)
 const float MAGNETIC_DECLINATION = 12.5;
-const byte HMC5883L_ADDRESS = 0x1E; // Confirmed I2C address
 
 /**
  * @brief Initializes the sensors on the main I2C bus.
@@ -47,23 +47,21 @@ bool compass_setup() {
         USBSerial.println("Compass module setup: QMI8658 IMU NOT FOUND.");
     }
 
-    // Manually check if a device acknowledges the HMC5883L's I2C address.
-    Wire.beginTransmission(HMC5883L_ADDRESS);
-    if (Wire.endTransmission() == 0) {
-        if (mag.begin()) {
-            // ** SATURATION FIX **
-            // The default gain is too high and causes the Z-axis to saturate.
-            // We set it to the lowest sensitivity (highest range) to prevent this.
-            mag.setMagGain(HMC5883_MAGGAIN_8_1);
-            mag_ready = true;
-            USBSerial.println("Compass module setup: HMC5883L FOUND.");
-        } else {
-            mag_ready = false;
-            USBSerial.println("Compass module setup: HMC5883L detected but library init failed.");
-        }
+    // Initialize the LIS3MDL magnetometer.
+    // The begin_I2C() function returns true if the sensor is found and initialized.
+    if (mag.begin_I2C()) {
+        // Configure the LIS3MDL for best performance and to avoid saturation.
+        // Set range to a high value to prevent magnetic saturation.
+        mag.setRange(LIS3MDL_RANGE_16_GAUSS);
+        // Set performance mode and data rate to match the IMU and filter.
+        mag.setPerformanceMode(LIS3MDL_ULTRAHIGHMODE);
+        mag.setDataRate(LIS3MDL_DATARATE_1000_HZ);
+        
+        mag_ready = true;
+        USBSerial.println("Compass module setup: LIS3MDL FOUND.");
     } else {
         mag_ready = false;
-        USBSerial.println("Compass module setup: HMC5883L NOT FOUND (no I2C device at address).");
+        USBSerial.println("Compass module setup: LIS3MDL NOT FOUND.");
     }
 
     // Match the filter's sample rate to the sensor's ODR (1000Hz)
@@ -88,13 +86,12 @@ void compass_loop() {
             }
         }
         if (!mag_ready) {
-            Wire.beginTransmission(HMC5883L_ADDRESS);
-            if (Wire.endTransmission() == 0) {
-                if(mag.begin()) {
-                    mag.setMagGain(HMC5883_MAGGAIN_8_1);
-                    mag_ready = true;
-                    USBSerial.println("Compass module re-check: HMC5883L FOUND.");
-                }
+            if(mag.begin_I2C()) {
+                mag.setRange(LIS3MDL_RANGE_16_GAUSS);
+                mag.setPerformanceMode(LIS3MDL_ULTRAHIGHMODE);
+                mag.setDataRate(LIS3MDL_DATARATE_1000_HZ);
+                mag_ready = true;
+                USBSerial.println("Compass module re-check: LIS3MDL FOUND.");
             }
         }
         last_reconnect_attempt = millis();
@@ -118,15 +115,24 @@ void compass_loop() {
     }
 
     if (mag_ready) {
+        // Read data from the LIS3MDL
         mag.getEvent(&mag_event);
         got_mag = true;
-        
-        // --- MAGNETOMETER DEBUGGING ---
-        static unsigned long last_mag_print = 0;
-        if(millis() - last_mag_print > 500) { // Print every 500ms
-            USBSerial.printf("Mag X: %.2f, Y: %.2f, Z: %.2f uT\n", mag_event.magnetic.x, mag_event.magnetic.y, mag_event.magnetic.z);
-            last_mag_print = millis();
+    }
+
+    // --- RAW SENSOR VALUE DEBUGGING ---
+    static unsigned long last_debug_print = 0;
+    if (millis() - last_debug_print > 500) { // Print every 500ms
+        if (got_accel) {
+            USBSerial.printf("Acc X: %.2f, Y: %.2f, Z: %.2f g\n", acc.x, acc.y, acc.z);
         }
+        if (got_gyro) {
+            USBSerial.printf("Gyr X: %.2f, Y: %.2f, Z: %.2f dps\n", gyr.x, gyr.y, gyr.z);
+        }
+        if (got_mag) {
+            USBSerial.printf("Mag X: %.2f, Y: %.2f, Z: %.2f uT\n", mag_event.magnetic.x, mag_event.magnetic.y, mag_event.magnetic.z);
+        }
+        last_debug_print = millis();
     }
 
     if (got_accel && got_gyro && got_mag) {
@@ -135,10 +141,24 @@ void compass_loop() {
         float gyr_y_rad = gyr.y * DEG_TO_RAD;
         float gyr_z_rad = gyr.z * DEG_TO_RAD;
 
-        // Remap magnetometer axes to align with the IMU's coordinate frame.
-        float mag_x = mag_event.magnetic.y;
+        // --- AXIS REMAPPING to align LIS3MDL with QMI8658 ---
+        // This mapping is based on the provided physical orientations.
+        // QMI8658 (IMU) is the reference coordinate system for the filter.
+        
+        // Filter's X (Up/Down) must match QMI's X-axis.
+        // QMI's X is Up/Down. LIS3MDL's Z is Up/Down.
+        // Therefore, mag_x = LIS3MDL's Z reading.
+        float mag_x = mag_event.magnetic.z;
+
+        // Filter's Y (Left/Right) must match QMI's Y-axis.
+        // QMI's Y is Left/Right. LIS3MDL's X is Left/Right.
+        // Therefore, mag_y = LIS3MDL's X reading.
         float mag_y = mag_event.magnetic.x;
-        float mag_z = -mag_event.magnetic.z;
+
+        // Filter's Z (Fwd/Bwd) must match QMI's Z-axis.
+        // QMI's Z is Fwd/Bwd. LIS3MDL's Y is Fwd/Bwd.
+        // Therefore, mag_z = LIS3MDL's Y reading.
+        float mag_z = mag_event.magnetic.y;
 
         // Update the filter with the new, corrected sensor data.
         filter.update(gyr_x_rad, gyr_y_rad, gyr_z_rad,
