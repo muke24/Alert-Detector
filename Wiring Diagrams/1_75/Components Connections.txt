@@ -1,0 +1,46 @@
+Electronics Components:
+
+ESP32: The microcontroller that controls everything.
+Pins: GPIO19, GPIO18, GPIO17, 3v3, GND, VBUS, SCL, SDA, SPKR+, SPKR-, GPS+, GPS-.
+
+12V to 5V Buck Converter: To step down the input voltage for the ESP32 and LED strip.
+Pins: Input +, Input -, Output +, Output -.
+
+XL6009E1 Boost Converter: To step up the 5V to 10V for the motor.
+Pins: Input +, Input -, Output +, Output -.
+
+WS2812B 48 LED Strip: The addressable LED lights.
+Pins: +, -, Data
+
+iFlight iPower GM2804 Motor: The brushless gimbal motor with the built-in ESC.
+Pins: +, -, Data
+
+MMC5603 Magnetometer: A sensor for magnetic fields.
+Pins: (UART) +, -, SDA, SCL
+
+AS5048A Encoder: A sensor for rotational position.
+Pins: (UART) +, -, SDA, SCL
+
+Schottky Diodes (x2): For protecting your two power inputs.
+
+
+Connections:
+TODO: CREATE CONNECTIONS
+
+ESP32 Connector (ESP32 will have wires connecting to this PCB): "GPIO19" to "?", "GPIO18" to "?", "GPIO17" to "?", "3v3" to "?" + "?", "GND" to "?" + "?", "VBUS" to "?", "SCL" to "?", "SDA" to "?", "SPKR+" to "?", "SPKR-" to "?", "GPS+" to "?", "GPS-" to "?".
+
+12V to 5V Buck Converter: "Input +" to "?", "Input -" to "?", "Output +" to "?", "Output -" to "?".
+
+XL6009E1 Boost Converter: "Input +" to "?", "Input -" to "?", "Output +" to "?", "Output -" to "?".
+
+WS2812B 48 LED Strip: "+" to "?", "-" to "?", "Data" to "?"
+
+iFlight iPower GM2804 Motor: "+" to "?", "-" to "?", "Data" to "?"
+
+MMC5603 Magnetometer: "+" to "?", "-" to "?", "SDA" to "?", "SCL" to "?"
+
+AS5048A Encoder: "+" to "?", "-" to "?", "SDA" to "?", "SCL" to "?"
+
+
+
+How can I turn this into a PCB using KiCad? Keep in mind, I have no experience making PCB's or using KiCad.
