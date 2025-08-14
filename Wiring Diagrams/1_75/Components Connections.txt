@@ -1,4 +1,4 @@
-Electronics Components:
+Components:
 
 ESP32: The microcontroller that controls everything.
 Pins: GPIO19, GPIO18, GPIO17, 3v3, GND, VBUS, SCL, SDA, SPKR+, SPKR-, GPS+, GPS-.
@@ -13,7 +13,7 @@ WS2812B 48 LED Strip: The addressable LED lights.
 Pins: +, -, Data
 
 iFlight iPower GM2804 Motor: The brushless gimbal motor with the built-in ESC.
-Pins: +, -, Data
+Pins: +, -, PWM
 
 MMC5603 Magnetometer: A sensor for magnetic fields.
 Pins: (UART) +, -, SDA, SCL
@@ -22,16 +22,19 @@ AS5048A Encoder: A sensor for rotational position.
 Pins: (UART) +, -, SDA, SCL
 
 Schottky Diodes (x2): For protecting your two power inputs.
+Pins: Input, Output
+
+GPS: Can be ignored as it's just the antenna with a regular RF wire. Included for clarification.
 
 
-Connections:
-TODO: CREATE CONNECTIONS
+Connection List:
+TODO: Complete Connections
 
-ESP32 Connector (ESP32 will have wires connecting to this PCB): "GPIO19" to "?", "GPIO18" to "?", "GPIO17" to "?", "3v3" to "?" + "?", "GND" to "?" + "?", "VBUS" to "?", "SCL" to "?", "SDA" to "?", "SPKR+" to "?", "SPKR-" to "?", "GPS+" to "?", "GPS-" to "?".
+ESP32 Connector: "GPIO19" to "PWM" of "Encoder", "GPIO18" to "Data" of "LED strip", "GPIO17" to "PWM" of "Motor", "3v3" to "+" of "MMC5603 and "+" of "Encoder", "GND" to "-" of "Encoder and "-" of "LED strip" and "-" of "MMC5603" and "Input-" of "Boost Converter" and "Output-" of "Buck Converter", "VBUS" to "Input+" of "Boost Converter" and "Output+" of "Buck Converter", "SCL" to "SCL" of "MMC5603", "SDA" to "SDA" of "MMC5603", "SPKR+" to "+" of "Speaker", "SPKR-" to "-" of "Speaker", "GPS+" to "+" of "GPS", "GPS-" to "-" of "GPS".
 
-12V to 5V Buck Converter: "Input +" to "?", "Input -" to "?", "Output +" to "?", "Output -" to "?".
+12V to 5V Buck Converter: "Input+" to "Output" of "Schottky Diode 1" and "Output" of "Schottky Diode 2", "Input-" to "-" of "Barrel Jack" and "-" of "Direct Connect", "Output+" to "Input+" of "Boost Converter" and "+" of "LED strip", "Output-" to "Input-" of "Boost Converter".
 
-XL6009E1 Boost Converter: "Input +" to "?", "Input -" to "?", "Output +" to "?", "Output -" to "?".
+XL6009E1 Boost Converter: "Input+" to "+" of "LED strip" and "Output+" of "Buck Converter" and "VBUS" of "ESP32", "Input-" to "?", "Output +" to "?", "Output -" to "?".
 
 WS2812B 48 LED Strip: "+" to "?", "-" to "?", "Data" to "?"
 
@@ -41,6 +44,21 @@ MMC5603 Magnetometer: "+" to "?", "-" to "?", "SDA" to "?", "SCL" to "?"
 
 AS5048A Encoder: "+" to "?", "-" to "?", "SDA" to "?", "SCL" to "?"
 
+Schottky Diode 1:
+
+Schottky Diode 2:
+
+Barrel Jack Input:
+
+Direct Connect Input:
 
 
-How can I turn this into a PCB using KiCad? Keep in mind, I have no experience making PCB's or using KiCad.
+Wiring:
+TODO: Complete the connector types for each module (ignore GPS).
+I will solder the following connectors to each pin of each module.
+- Male jumper wire
+- Female jumper wire
+
+(Use the ESP32 as an example)
+ESP32 Connector: Solder male connectors to all wires coming from ESP32.
+- VBUS: 
