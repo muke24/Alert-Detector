@@ -26,7 +26,7 @@ Pins: (UART) +, -, SDA, SCL
 
 **AS5048A Encoder:** A sensor for rotational position.
 
-Pins: (UART) +, -, SDA, SCL
+Pins: (UART) +, -, PWM
 
 **Schottky Diodes (x2):** For protecting the two power inputs.
 
