@@ -4056,6 +4056,16 @@
 	)
 	(wire
 		(pts
+			(xy 217.17 88.9) (xy 217.17 96.52)
+		)
+		(stroke
+			(width 0)
+			(type default)
+		)
+		(uuid "084c3d95-a56c-4374-9003-de11c8cd8a0c")
+	)
+	(wire
+		(pts
 			(xy 110.49 151.13) (xy 110.49 154.94)
 		)
 		(stroke
@@ -4226,7 +4236,7 @@
 	)
 	(wire
 		(pts
-			(xy 214.63 73.66) (xy 214.63 99.06)
+			(xy 214.63 73.66) (xy 214.63 83.82)
 		)
 		(stroke
 			(width 0)
@@ -4346,7 +4356,7 @@
 	)
 	(wire
 		(pts
-			(xy 217.17 73.66) (xy 217.17 96.52)
+			(xy 217.17 73.66) (xy 217.17 83.82)
 		)
 		(stroke
 			(width 0)
@@ -5803,6 +5813,16 @@
 			(type default)
 		)
 		(uuid "f8ca7f59-c3ec-431f-bc24-131f212cd092")
+	)
+	(wire
+		(pts
+			(xy 214.63 88.9) (xy 214.63 99.06)
+		)
+		(stroke
+			(width 0)
+			(type default)
+		)
+		(uuid "f9556b39-4272-407a-a64d-7f0483ee45f5")
 	)
 	(wire
 		(pts
@@ -7726,6 +7746,75 @@
 		)
 	)
 	(symbol
+		(lib_id "Device:R_Small")
+		(at 217.17 86.36 0)
+		(unit 1)
+		(exclude_from_sim no)
+		(in_bom yes)
+		(on_board yes)
+		(dnp no)
+		(uuid "a751eced-f489-4a8c-9a69-7855865df7da")
+		(property "Reference" "R3"
+			(at 218.44 86.106 0)
+			(effects
+				(font
+					(size 1.016 1.016)
+				)
+				(justify left)
+			)
+		)
+		(property "Value" "R_Small"
+			(at 218.44 89.408 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left)
+			)
+		)
+		(property "Footprint" ""
+			(at 217.17 86.36 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(hide yes)
+			)
+		)
+		(property "Datasheet" "~"
+			(at 217.17 86.36 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(hide yes)
+			)
+		)
+		(property "Description" "Resistor, small symbol"
+			(at 217.17 86.36 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(hide yes)
+			)
+		)
+		(pin "1"
+			(uuid "eaaa6f8f-c96c-439b-a81e-2253dd0fb221")
+		)
+		(pin "2"
+			(uuid "629b12ab-5ea5-47d0-85a0-fc81fa6724ab")
+		)
+		(instances
+			(project ""
+				(path "/98b16ca0-9240-4131-a459-a4d203a19b3c"
+					(reference "R3")
+					(unit 1)
+				)
+			)
+		)
+	)
+	(symbol
 		(lib_id "Device:C_Small")
 		(at 80.01 83.82 90)
 		(unit 1)
@@ -8081,6 +8170,75 @@
 			(project ""
 				(path "/98b16ca0-9240-4131-a459-a4d203a19b3c"
 					(reference "U2")
+					(unit 1)
+				)
+			)
+		)
+	)
+	(symbol
+		(lib_id "Device:R_Small")
+		(at 214.63 86.36 0)
+		(unit 1)
+		(exclude_from_sim no)
+		(in_bom yes)
+		(on_board yes)
+		(dnp no)
+		(uuid "dd6f906d-e160-4a99-9822-869d90697d86")
+		(property "Reference" "R4"
+			(at 211.328 86.106 0)
+			(effects
+				(font
+					(size 1.016 1.016)
+				)
+				(justify left)
+			)
+		)
+		(property "Value" "R_Small"
+			(at 205.994 89.408 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left)
+			)
+		)
+		(property "Footprint" ""
+			(at 214.63 86.36 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(hide yes)
+			)
+		)
+		(property "Datasheet" "~"
+			(at 214.63 86.36 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(hide yes)
+			)
+		)
+		(property "Description" "Resistor, small symbol"
+			(at 214.63 86.36 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(hide yes)
+			)
+		)
+		(pin "1"
+			(uuid "3a8d73a4-97e8-43db-be19-f8efdf84ae5d")
+		)
+		(pin "2"
+			(uuid "db6675fd-260b-46db-9b07-446f0386c4b3")
+		)
+		(instances
+			(project "kiCadWiringDiagram"
+				(path "/98b16ca0-9240-4131-a459-a4d203a19b3c"
+					(reference "R4")
 					(unit 1)
 				)
 			)
