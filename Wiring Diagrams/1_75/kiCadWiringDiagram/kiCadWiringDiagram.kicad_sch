@@ -3877,12 +3877,6 @@
 		(uuid "d1633458-fba6-49b4-a7cd-7156268dccdf")
 	)
 	(junction
-		(at 106.68 134.62)
-		(diameter 0)
-		(color 0 0 0 0)
-		(uuid "d4066b48-7456-4e13-b36c-cba7a8778668")
-	)
-	(junction
 		(at 227.33 149.86)
 		(diameter 0)
 		(color 0 0 0 0)
@@ -3911,6 +3905,12 @@
 		(diameter 0)
 		(color 0 0 0 0)
 		(uuid "da9f7e35-b726-49c8-8b52-403b6d4021f8")
+	)
+	(junction
+		(at 106.68 135.89)
+		(diameter 0)
+		(color 0 0 0 0)
+		(uuid "dd151268-2809-434d-b5cc-9f7487b75da9")
 	)
 	(junction
 		(at 251.46 130.81)
@@ -4066,6 +4066,16 @@
 	)
 	(wire
 		(pts
+			(xy 106.68 135.89) (xy 106.68 134.62)
+		)
+		(stroke
+			(width 0)
+			(type default)
+		)
+		(uuid "1685dcba-6305-44d1-a530-be13806da6c7")
+	)
+	(wire
+		(pts
 			(xy 199.39 154.94) (xy 213.36 154.94)
 		)
 		(stroke
@@ -4093,16 +4103,6 @@
 			(type default)
 		)
 		(uuid "19ac4c40-1f33-4fc7-a2d6-92fc47e98d68")
-	)
-	(wire
-		(pts
-			(xy 106.68 134.62) (xy 106.68 137.16)
-		)
-		(stroke
-			(width 0)
-			(type default)
-		)
-		(uuid "1a6eaaa7-8a1f-4f5f-9dce-780d6a2ac4a5")
 	)
 	(wire
 		(pts
@@ -4556,7 +4556,7 @@
 	)
 	(wire
 		(pts
-			(xy 127 134.62) (xy 106.68 134.62)
+			(xy 127 135.89) (xy 106.68 135.89)
 		)
 		(stroke
 			(width 0)
@@ -4793,6 +4793,16 @@
 			(type default)
 		)
 		(uuid "939362d2-d57d-472a-9b97-8b14a5ff80f6")
+	)
+	(wire
+		(pts
+			(xy 106.68 135.89) (xy 106.68 137.16)
+		)
+		(stroke
+			(width 0)
+			(type default)
+		)
+		(uuid "9acf525d-2417-4000-8066-cda58284e61a")
 	)
 	(wire
 		(pts
@@ -5296,7 +5306,7 @@
 	)
 	(wire
 		(pts
-			(xy 127 120.65) (xy 127 134.62)
+			(xy 127 120.65) (xy 127 135.89)
 		)
 		(stroke
 			(width 0)
@@ -5547,7 +5557,7 @@
 	)
 	(symbol
 		(lib_id "Interface_Expansion:MCP23017_ML")
-		(at 40.64 123.19 0)
+		(at 40.64 123.19 180)
 		(unit 1)
 		(exclude_from_sim no)
 		(in_bom yes)
@@ -5556,25 +5566,25 @@
 		(fields_autoplaced yes)
 		(uuid "2c855cdc-920e-416f-abd6-c509c73201ec")
 		(property "Reference" "U5"
-			(at 42.7833 95.25 0)
+			(at 43.7581 148.59 0)
 			(effects
 				(font
 					(size 1.27 1.27)
 				)
-				(justify left)
+				(justify right)
 			)
 		)
 		(property "Value" "MCP23017_ML"
-			(at 42.7833 97.79 0)
+			(at 43.7581 151.13 0)
 			(effects
 				(font
 					(size 1.27 1.27)
 				)
-				(justify left)
+				(justify right)
 			)
 		)
 		(property "Footprint" "Package_DFN_QFN:QFN-28-1EP_6x6mm_P0.65mm_EP4.25x4.25mm"
-			(at 45.72 148.59 0)
+			(at 35.56 97.79 0)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -5584,7 +5594,7 @@
 			)
 		)
 		(property "Datasheet" "https://ww1.microchip.com/downloads/aemDocuments/documents/APID/ProductDocuments/DataSheets/MCP23017-Data-Sheet-DS20001952.pdf"
-			(at 45.72 151.13 0)
+			(at 35.56 95.25 0)
 			(effects
 				(font
 					(size 1.27 1.27)
