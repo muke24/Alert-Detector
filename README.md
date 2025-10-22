@@ -20,7 +20,7 @@ A Jetson Nano should do that job well, but that would get expensive.
 All parts can be found on AliExpress, totalling around $200 AUD from memory. Uses 3D printed model for casing with model files included. 
 Uses DIY knob as inspiration found at https://github.com/scottbez1/smartknob. The youtube video I followed was: https://www.youtube.com/watch?v=ip641WmY4pA.
 I used this as I did not want a cheap feel to the device, and makes it more premium and is stronger than a regular rotary encoder like an EC35 rotary encoder.
-I also did not want to explicetly use touch, as touch screens and cars don't work well together in my humble opinion, so I wanted to use the touch screen as a sensor to know when the knob is pushed down, which would in theory make a haptic like vibration to replicate a button press. This has not been completed, but that was the idea.
+I also did not want to explicitly use touch, as touch screens and cars don't work well together in my humble opinion, so I wanted to use the touch screen as a sensor to know when the knob is pushed down, which would in theory make a haptic like vibration to replicate a button press. This has not been completed, but that was the idea.
 
 ----------------------------------------
 
