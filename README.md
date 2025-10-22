@@ -24,7 +24,7 @@ I also did not want to explicitly use touch, as touch screens and cars don't wor
 
 ----------------------------------------
 
-
+Here are some pictures of the device, some pictures older than othersare shown throughout the making.
 
 https://github.com/user-attachments/assets/8ef88b90-4c08-46e0-89e6-efae050536bf
 
