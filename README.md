@@ -24,6 +24,15 @@ I also did not want to explicitly use touch, as touch screens and cars don't wor
 
 ----------------------------------------
 
+Some random details:
+
+M2 screws used. Don't use M2.5 or M3 as they are too phat.
+The 1.75 inch version is the most up to date, however older versions did have the LED blinking functionality for a different ESP32.
+Just use the 1_75 as I cannot even remember what the others were like.
+Feel free to enquire about anything, I just don't have the time as of the moment to do a full deep dive of this repository.
+
+----------------------------------------
+
 Here are some pictures of the device, some pictures older than othersare shown throughout the making.
 
 https://github.com/user-attachments/assets/8ef88b90-4c08-46e0-89e6-efae050536bf
