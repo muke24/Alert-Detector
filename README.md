@@ -1,4 +1,4 @@
-Made for fun and DIY learning. 
+Made for fun. Sorry in advance, the organisation is pure executive dysfunction and the last time I worked on this project was months ago and I've forgotten stuff. I'll update this when I go through the files again to rejot my memory and provide better organised info.
 
 ----------------------------------------
 
@@ -33,11 +33,50 @@ Some random details:
 M2 screws used. Don't use M2.5 or M3 as they are too phat.
 The 1.75 inch version is the most up to date, however older versions did have the LED blinking functionality for a different ESP32.
 Just use the 1_75 as I cannot even remember what the others were like.
-Feel free to enquire about anything, I just don't have the time as of the moment to do a full deep dive of this repository.
+Feel free to enquire about anything, I just don't have the time as of the moment to do a full deep dive of this repository yet.
 
 ----------------------------------------
 
-Here are some pictures of the device, some pictures older than othersare shown throughout the making.
+Relevant Information (Work in Progress)
+
+There's a lot of old, random and unfinished stuff.
+There's some random AI generated stuff.
+
+There's 3 different attempts of making this device.
+(Thats why its all messy). I will name them by revision. 
+
+- 1.75 Inch Waveshare (As seen in pictures | Revision 3): Only able to test with real alerts before the GUI and compass was working, as Waze seems to have blocked their URL from ESP's sometime in July??? idk but it once worked with the barebones device as proof
+AI told me it probably has something to do with cookies as this JSON data can still be retrieved via a web browser on PC.
+LED's dont work, as I havent wired them up nor coded it for this device yet.
+Don't think compass will work as I haven't hooked up a magnetometer. The Waveshare only has a 6-axis IMU without a magnetometer which is needed. I will use a HMC5883
+I had a freelancer make a PCB, but they exceeded budget before completion. Some things were not up to spec.
+The PCB includes power management, connections for ESP32 and modules, and the magnetometer. I have not been able to send to manufacture yet so I am not sure if it works. I was going to use pcbway or jlcpcb.
+Has a demo mode if the Waze URL or Wifi isn't working.
+
+- 1.28 Inch ESP32C3 Knob + LilyGo T-SIM7000G (Revision 2): Never got LTE working for network access (I'd have to code for every carrier), 
+however this worked. LED's light up. 1.28 Inch ESP32C3 Knob Screen was for GUI and rotary encoder data. Lilygo was for receiving the Alerts via LTE or Wifi (couldn't get LTE working) and connecting together modules (LEDs, IMU ect)
+Also attempted getting a waveshare 1.28 screen (with no ESP32) connected, but I don't think it worked. I moved onto the 1.75inch after this.
+
+- ESP-WROOM-32D (Revision 1): Used for testing IMU data and Waze data retrieval.
+
+FILES
+
+Revision 3
+Code: Code/1_75 Inch/New/AlertFinder.ino
+Models: 
+PCB Files: 
+Parts: 
+- ESP32: Waveshare 1.75Inch AMOLED
+- LED: 48leds WS2812B 3mm width
+- Motor: 2804 iFlight Ipower (will test cheaper model eventually)
+- Magnetometer: MMC5883
+
+Other:
+Motor controller (Might be changed on PCB if no stock is available): 
+
+----------------------------------------
+
+Revision 3.
 
 https://github.com/user-attachments/assets/8ef88b90-4c08-46e0-89e6-efae050536bf
 
