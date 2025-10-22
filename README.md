@@ -1,5 +1,7 @@
 Made for fun and DIY learning. Also sick of P platers in Australia being fined for simply having their phone plugged into their car, without actually using it aside from navigation and road information purposes. Go fine the boomers who actually have money NSW...
 
+----------------------------------------
+
 A really cool project which scapes Waze API alert data (currently only POLICE alerts) and displays an arrow pointing towards the closest alert. 
 It also shows the heat level, determined by how many police alerts are in the area.
 Along with that, the icon for the alert which was detected is also displayed, so if there are 3 police cars in the vicinity then 3 police icons will be shown.
