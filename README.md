@@ -48,6 +48,7 @@ Relevant Information (Work in Progress)
 
 There's a lot of old, random and unfinished stuff.
 There's some random AI generated stuff.
+There is a lot more info within the files, its just really unorganised.
 
 There's 3 different attempts of making this device.
 (Thats why its all messy). I will name them by revision. 
