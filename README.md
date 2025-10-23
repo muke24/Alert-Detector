@@ -37,6 +37,13 @@ Feel free to enquire about anything, I just don't have the time as of the moment
 
 ----------------------------------------
 
+Data Source Warning: 
+The device currently uses a reverse-engineered, non-public Waze URL. 
+This method is fragile and likely violates Waze's Terms of Service. The URL is currently broken for the device (it only works with cookies), 
+so the first challenge for the community is to fix the access method (or find a new, legal API!). All code is provided under the MIT license."
+
+----------------------------------------
+
 Relevant Information (Work in Progress)
 
 There's a lot of old, random and unfinished stuff.
