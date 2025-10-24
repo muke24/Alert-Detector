@@ -8,7 +8,7 @@ The distance of the closest alert is also shown. Alert submission back to Waze d
 
 This used to work perfectly, and if you use the Waze URL found within the code and paste it in to your search bar, you'll still see the JSON containing all of the alerts.
 I think Waze may have patched this for devices which doesn't send cookie data, like this ESP32, but with some hacking around I think someone could get past this.
-This code can be found in "Code/1_75 Inch/AlertFinder/AlertRetriever.cpp". Keep in mind this is a Waze backdoor API URL, use at your own risk. This could be changed at any time which it seems that some sort of security with it has changed and has not been working recently with the ESP32's I have tested recently. It still works within a Unity application as of currently. I will add that project to my GitHub soon.
+This code can be found in "Code/1_75 Inch/AlertFinder/AlertRetriever.cpp". Keep in mind this is a Waze backdoor API URL, use at your own risk. This could be changed at any time which it seems that some sort of security with it has changed and has not been working recently with the ESP32's I have tested recently. It still works within a Unity application as of currently - https://github.com/muke24/Civic_03
 
 Uses DIY knob as inspiration found at https://github.com/scottbez1/smartknob. The youtube video I followed was: https://www.youtube.com/watch?v=ip641WmY4pA.
 I used this as I did not want a cheap feel to the device, and makes it more premium and is stronger than a regular rotary encoder like an EC35 rotary encoder.
