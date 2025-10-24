@@ -73,7 +73,27 @@ Pretty much anything connecting to the PCB hasn't been tested yet. I do however 
 
 I do not want precise touch functionality, touch only exists to detect button presses. A mini touch screen makes no sense on a device made for use in a car to specifically reduce the need to even look at the Waze app for alert info.
 
-I did make a different version with different parts. It was ugly and no model was made for it, but functionally it worked entirely (encoder worked, LED's worked and would flash at a speed dependant on how far the closest alert was, GUI was functional but showed no colour and was ugly, the arrow pointed at the closest police alert, speaker made OG NFSMW radar sounds which also played repeatedly dependant on how far the closest alert was). This can be found somewhere in the "Old" folder. I've provided Google Drive links with videos of the old version working with real alerts.  
+I did make a different version with different parts. It was ugly and no model was made for it, but functionally it worked entirely (encoder worked, LED's worked and would flash at a speed dependant on how far the closest alert was, GUI was functional but showed no colour and was ugly, the arrow pointed at the closest police alert, speaker made OG NFSMW radar sounds which also played repeatedly dependant on how far the closest alert was). This can be found somewhere in the "Old" folder. I've provided Google Drive links with videos of the old version working with real alerts.
+
+----------------------------------------
+
+Additional Remarks:
+
+If I were to pick and choose any future ideas, I would do this -
+
+Models
+Multiple models with differing price ranges:
+- Cheapest: 1.46i Waveshare AMOLED with regular rotary encoder. Similar design to how it is now but cheaper and simpler. (Around $120 AUD)
+- Mid Range: 1.75i Waveshare AMOLED (this design) but with added dashcam functionality. (Around $275 AUD)
+- Flagship: 1.75i AMOLED using Nvidia Jetson Nano with dashcam and AI alert auto detection (Around a steap $850 AUD). (I know this is pretty ambitious, wanna team up Waze?)
+
+Software
+- A phone app to change settings and view dashcam videos if it were to be added. 
+- AI Auto detection of alerts via camera.
+
+Hardware
+(Flagship) Dual PTZ Camera's for better long distance accuracy. LIDAR won't work through glass.
+(Flagship) Custom PCB built within the enclosure instead of the knob.
 
 ----------------------------------------
 
