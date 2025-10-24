@@ -7,7 +7,7 @@ The distance of the closest alert is also shown. Alert submission back to Waze d
 
 This used to work perfectly, and if you use the Waze URL found within the code and paste it in to your search bar, you'll still see the JSON containing all of the alerts.
 I think Waze may have patched this for devices which doesn't send cookie data, like this ESP32, but with some hacking around I think someone could get past this.
-This code can be found in "Code/1_75 Inch/AlertFinder/AlertRetriever.cpp".
+This code can be found in "Code/1_75 Inch/AlertFinder/AlertRetriever.cpp". Keep in mind this is a Waze backdoor API URL, use at your own risk. This could be changed at any time which it seems that some sort of security with it has changed and has not been working recently with the ESP32's I have tested recently. It still works within a Unity application as of currently. I will add that project to my GitHub soon.
 
 
 I'd love to add a dashcam functionality and even AI detection of alerts, however the current device runs at about 15 frames per second, so this is probably not viable with this setup.
@@ -36,7 +36,7 @@ so the first challenge for the community is to fix the access method (or find a 
 ----------------------------------------
 
 PCB Warning:
-PCB is untested. It is used to connect the ESP32 to the modules and power management. The ESP32 connects to this PCB by feeding 28AUG enameled copper wires through the hollow shaft motor. 
+PCB is untested. It is used to connect the ESP32 to the modules and power management. The ESP32 connects to this PCB by feeding 28AUG enameled copper wires through the hollow shaft motor. Do not hot glue the enamelled wires directly to the ESP32, but solder them onto the end of a 8 pin male header and push that into the device, seems to work pretty well.
 
 ----------------------------------------
 
@@ -53,8 +53,21 @@ Parts:
 - Magnetometer: MMC5883 (on PCB)
 - PCB (To be sent to manufacturer JLCPCB)
 
+- 28AUG Enamelled Wire
+- 8 pin male header
+- 
+
 Other:
 Motor controller: TMC6300-LA (Might be changed on PCB if no stock is available)
+
+----------------------------------------
+
+Things I have not personally tested on this model yet:
+I have not yet manufactured a PCB yet.
+I have not tested or coded the motor functionality. The motor will be used for haptics, and knob rotation feedback and selecting options such as changing alerts, brightness ect (not coded yet but you get the idea).
+LED's have not yet been tested.
+
+I did make a different version with different parts. It was ugly and no model was made for it, but functionally it worked entirely (encoder worked, LED's worked and would flash at a speed dependant on how far the closest alert was, GUI was functional but showed no colour and was ugly, the arrow pointed at the closest police alert, speaker made OG NFSMW radar sounds which also played repeatedly dependant on how far the closest alert was). This can be found in the "Old" folder, but its very messy and unorganised. I've provided Google Drive links with videos of it working with real alerts.
 
 ----------------------------------------
 
