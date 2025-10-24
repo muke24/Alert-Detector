@@ -98,6 +98,8 @@ Hardware
 
 ----------------------------------------
 
+Pictures taken throughout development:
+
 https://github.com/user-attachments/assets/8ef88b90-4c08-46e0-89e6-efae050536bf
 
 ![IMG_3583](https://github.com/user-attachments/assets/8a708f85-1d08-458c-ad3b-f7323527e11f)
