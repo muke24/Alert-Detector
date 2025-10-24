@@ -8,7 +8,7 @@
  * @version   2.50 (Refactored)
  * @date      2025-07-25
  *
- * @copyright Copyright (c) 2025
+ * @copyright MIT License
  *
  */
 
