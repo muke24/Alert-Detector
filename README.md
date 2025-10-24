@@ -1,4 +1,4 @@
-Made for fun.
+Made for fun. I'd love for likeminded individuals to help with this project.
 
 ----------------------------------------
 Description:
@@ -63,14 +63,15 @@ TODO:
 - Code other Waze alerts and subtypes
 - Code user settings so that brightness / selected alerts / ect can be modified
 
-Things I have not personally tested on this model yet:
+Untested:
 I have not yet manufactured a PCB.
 I have not tested or coded the motor functionality. The motor will be used for haptics, and knob rotation feedback and selecting options such as changing alerts, brightness ect (not coded yet but you get the idea).
 LED's have not yet been tested.
+Pretty much anything connecting to the PCB hasn't been tested yet. I do however have coded all of these functions (except motor function) on the old version of this device (in the "Old" folder).
 
-I do not want touch functionality, touch only exists to detect button presses. A mini touch screen makes no sense on a device made for use in a car to specifically reduce the need to even look at the Waze app for alert info.
+I do not want precise touch functionality, touch only exists to detect button presses. A mini touch screen makes no sense on a device made for use in a car to specifically reduce the need to even look at the Waze app for alert info.
 
-I did make a different version with different parts. It was ugly and no model was made for it, but functionally it worked entirely (encoder worked, LED's worked and would flash at a speed dependant on how far the closest alert was, GUI was functional but showed no colour and was ugly, the arrow pointed at the closest police alert, speaker made OG NFSMW radar sounds which also played repeatedly dependant on how far the closest alert was). This can be found somewhere in the "Old" folder. I've provided Google Drive links with videos of the old version working with real alerts.
+I did make a different version with different parts. It was ugly and no model was made for it, but functionally it worked entirely (encoder worked, LED's worked and would flash at a speed dependant on how far the closest alert was, GUI was functional but showed no colour and was ugly, the arrow pointed at the closest police alert, speaker made OG NFSMW radar sounds which also played repeatedly dependant on how far the closest alert was). This can be found somewhere in the "Old" folder. I've provided Google Drive links with videos of the old version working with real alerts.  
 
 ----------------------------------------
 
