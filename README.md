@@ -43,7 +43,7 @@ Parts:
 (will test cheaper model eventually, I received 3 different types, there was a cheaper one that would have worked with some modeling work to add an encoder {https://www.aliexpress.com/item/4001123251754.html?spm=a2g0o.order_list.order_list_main.77.7c741802dJIMvc} but I received the iFlight first)
 - PCB (To be sent to manufacturer JLCPCB)
 - 28AUG Enamelled Wire
-- 8 pin male header
+- 8 pin 2.54mm male header
 - 10 Pin JST XH male header
 
 On PCB:
