@@ -40,27 +40,30 @@ PCB is untested. It is used to connect the ESP32 to the modules and power manage
 
 ----------------------------------------
 
-Files Needed for Creation
+Files for Creation
 
 Code: "Code/1_75 Inch/AlertFinder.ino"
 Models: "Models/13" (Read the README file in Models folder)
 PCB Files: PCB/1_75/kiCadWiringDiagram2025aug29/kiCadWiringDiagram
 Parts: 
 - ESP32: Waveshare 1.75Inch AMOLED ESP32-S3 (with GPS and Speaker) - https://www.waveshare.com/esp32-s3-touch-amoled-1.75.htm
-- LED: 48leds WS2812B 3mm width - 
+- LED: (48leds used) 160 LEDs/m WS2812B 2.7mm width - https://www.aliexpress.com/item/1005006697141669.html?spm=a2g0o.order_list.order_list_main.172.643b18023ERucf
 - Motor: 2804 iFlight Ipower - https://www.aliexpress.com/item/1005008389835260.html?spm=a2g0o.order_list.order_list_main.67.7c741802dJIMvc
 (will test cheaper model eventually, I received 3 different types, there was a cheaper one that would have worked with some modeling work to add an encoder {https://www.aliexpress.com/item/4001123251754.html?spm=a2g0o.order_list.order_list_main.77.7c741802dJIMvc} but I received the iFlight first)
-- Magnetometer: MMC5883 (on PCB)
 - PCB (To be sent to manufacturer JLCPCB)
-
 - 28AUG Enamelled Wire
 - 8 pin male header
-- 
+- 10 Pin JST XH male header
 
-Other:
-Motor controller: TMC6300-LA (Might be changed on PCB if no stock is available)
+On PCB:
+- Magnetometer: MMC5883 (on PCB)
+- Motor controller: TMC6300-LA (Might be changed on PCB if no stock is available)
 
 ----------------------------------------
+
+Other:
+
+Yes I kept the bottom two edge LED's unlike the original in NFSMW. I will leave turn these off via code, but they are kept so that the device can use these LED's if the orientation of the device is upside-down.
 
 Things I have not personally tested on this model yet:
 I have not yet manufactured a PCB yet.
