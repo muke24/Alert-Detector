@@ -21,8 +21,8 @@ A Jetson Nano should do that job well, but that would get expensive. Definitely 
 
 Data Source Warning: 
 The device currently uses a reverse-engineered, non-public Waze URL. 
-This method is fragile and likely violates Waze's Terms of Service. The URL is currently broken for the device (it only works with cookies), 
-so the first challenge for the community is to fix the access method (or find a new, legal API!). All code is provided under the MIT license."
+This method is fragile and likely violates Waze's Terms of Service. The URL is currently broken for the device (unsure of why, it works perfectly within Unity and it DID used to work on this ESP32, one day it just stopped working, not sure exactly what it is related to but AI told me its something to do with cookies, so there is a head start, maybe I just missed something, and if not I can already think of a few dodgy work arounds eg. get a server to pull the data instead and then get this device to pull from the server), 
+so the first challenge for the community is to fix the access method. All code is provided under the MIT license."
 
 ----------------------------------------
 
