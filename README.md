@@ -90,6 +90,7 @@ Multiple models with differing price ranges:
 Software
 - A phone app to change settings and view dashcam videos if it were to be added. 
 - AI Auto detection of alerts via camera.
+- Alert Reporting
 
 Hardware
 (Flagship) Dual PTZ Camera's for better long distance accuracy. LIDAR won't work through glass.
