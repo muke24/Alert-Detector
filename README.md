@@ -33,9 +33,11 @@ PCB is untested. It is used to connect the ESP32 to the modules and power manage
 
 Files for Creation
 
-Code: "Code/1_75 Inch/AlertFinder.ino"
-Models: "Models/13" (Read the README file in Models folder)
-PCB Files: PCB/1_75/kiCadWiringDiagram2025aug29/kiCadWiringDiagram
+- Code: "Code/1_75 Inch/AlertFinder.ino"
+- Models: "Models/13" (Read the README file in Models folder)
+- PCB Files: PCB/1_75/kiCadWiringDiagram2025aug29/kiCadWiringDiagram
+
+
 Parts: 
 - ESP32: Waveshare 1.75Inch AMOLED ESP32-S3 (with GPS and Speaker) - https://www.waveshare.com/esp32-s3-touch-amoled-1.75.htm
 - LED: (48leds used) 160 LEDs/m WS2812B 2.7mm width - https://www.aliexpress.com/item/1005006697141669.html?spm=a2g0o.order_list.order_list_main.172.643b18023ERucf
