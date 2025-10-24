@@ -1,6 +1,7 @@
 Made for fun.
 
 ----------------------------------------
+Description:
 
 This project was inspired by the original Need for Speed Most Wanted (2005) which includes a police detection device which points towards the closest police car. A really cool project which scrapes Waze API alert data (currently only POLICE alerts) and displays an arrow pointing towards the closest alert. It also shows the heat level, determined by how many police alerts are in the area. Along with that, the icon for the alert which was detected is also displayed, so if there are 3 police cars in the vicinity then 3 police icons will be shown.
 The distance of the closest alert is also shown. Alert submission back to Waze does not exist, but if someone figured out how to, that would be cool.
@@ -9,22 +10,12 @@ This used to work perfectly, and if you use the Waze URL found within the code a
 I think Waze may have patched this for devices which doesn't send cookie data, like this ESP32, but with some hacking around I think someone could get past this.
 This code can be found in "Code/1_75 Inch/AlertFinder/AlertRetriever.cpp". Keep in mind this is a Waze backdoor API URL, use at your own risk. This could be changed at any time which it seems that some sort of security with it has changed and has not been working recently with the ESP32's I have tested recently. It still works within a Unity application as of currently. I will add that project to my GitHub soon.
 
-
-I'd love to add a dashcam functionality and even AI detection of alerts, however the current device runs at about 15 frames per second, so this is probably not viable with this setup.
-A Jetson Nano should do that job well, but that would get expensive.
-
-----------------------------------------
-
-Uses 3D printed model for casing with model files included. 
 Uses DIY knob as inspiration found at https://github.com/scottbez1/smartknob. The youtube video I followed was: https://www.youtube.com/watch?v=ip641WmY4pA.
 I used this as I did not want a cheap feel to the device, and makes it more premium and is stronger than a regular rotary encoder like an EC35 rotary encoder.
 I also did not want to explicitly use touch, as touch screens and cars don't work well together in my humble opinion, so I wanted to use the touch screen as a sensor to know when the knob is pushed down, which would in theory make a haptic like vibration to replicate a button press. This has not been completed, but that was the idea.
 
-----------------------------------------
-
-3D Printed Model:
-
-M2 screws used.
+I'd love to add a dashcam functionality and even AI detection of alerts, however the current device runs at about 15 frames per second, so this is not viable with this setup.
+A Jetson Nano should do that job well, but that would get expensive. Definitely something I want to make though.
 
 ----------------------------------------
 
@@ -59,18 +50,27 @@ On PCB:
 - Magnetometer: MMC5883 (on PCB)
 - Motor controller: TMC6300-LA (Might be changed on PCB if no stock is available)
 
+M2 screws used.
+
 ----------------------------------------
 
-Other:
+TODO:
 
-Yes I kept the bottom two edge LED's unlike the original in NFSMW. I will leave turn these off via code, but they are kept so that the device can use these LED's if the orientation of the device is upside-down.
+- Remove wire tray from "15" model and rename that to "16". (It was added to test things before I got a PCB manufactured, but even the tray was never used, so will need to fix that up)
+- Code haptics and knob control for the motor
+- Code LED's
+- Code the magnetometer (merge the MMC5883 with the built-in 6 axis IMU on the Waveshare device to create a 9-axis IMU so that compass will work accurately)
+- Code other Waze alerts and subtypes
+- Code user settings so that brightness / selected alerts / ect can be modified
 
 Things I have not personally tested on this model yet:
-I have not yet manufactured a PCB yet.
+I have not yet manufactured a PCB.
 I have not tested or coded the motor functionality. The motor will be used for haptics, and knob rotation feedback and selecting options such as changing alerts, brightness ect (not coded yet but you get the idea).
 LED's have not yet been tested.
 
-I did make a different version with different parts. It was ugly and no model was made for it, but functionally it worked entirely (encoder worked, LED's worked and would flash at a speed dependant on how far the closest alert was, GUI was functional but showed no colour and was ugly, the arrow pointed at the closest police alert, speaker made OG NFSMW radar sounds which also played repeatedly dependant on how far the closest alert was). This can be found in the "Old" folder, but its very messy and unorganised. I've provided Google Drive links with videos of it working with real alerts.
+I do not want touch functionality, touch only exists to detect button presses. A mini touch screen makes no sense on a device made for use in a car to specifically reduce the need to even look at the Waze app for alert info.
+
+I did make a different version with different parts. It was ugly and no model was made for it, but functionally it worked entirely (encoder worked, LED's worked and would flash at a speed dependant on how far the closest alert was, GUI was functional but showed no colour and was ugly, the arrow pointed at the closest police alert, speaker made OG NFSMW radar sounds which also played repeatedly dependant on how far the closest alert was). This can be found somewhere in the "Old" folder. I've provided Google Drive links with videos of the old version working with real alerts.
 
 ----------------------------------------
 
