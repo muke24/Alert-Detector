@@ -1,4 +1,4 @@
-Made for fun. I'd love for likeminded individuals to help with this project. I've been working on this project for 3 years on and off, so make good use of it.
+Made for fun. I'd love for likeminded individuals to help with this project. I've been working on this idea for 3 years on and off, so make good use of it.
 
 ----------------------------------------
 Description:
