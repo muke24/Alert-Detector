@@ -64,6 +64,7 @@ TODO:
 - Code the magnetometer (merge the MMC5883 with the built-in 6 axis IMU on the Waveshare device to create a 9-axis IMU so that compass will work accurately)
 - Code other Waze alerts and subtypes
 - Code user settings so that brightness / selected alerts / ect can be modified
+- Model universal mirror mounts so that the device can be held in place
 
 Untested:
 I have not yet manufactured a PCB.
