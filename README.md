@@ -93,8 +93,8 @@ Software
 - Alert Reporting
 
 Hardware
-(Flagship) Dual PTZ Camera's for better long distance accuracy. LIDAR won't work through glass.
-(Flagship) Custom PCB built within the enclosure instead of the knob.
+- (Flagship) Dual PTZ Camera's for better long distance accuracy. LIDAR won't work through glass.
+- (Flagship) Custom PCB built within the enclosure instead of the knob.
 
 ----------------------------------------
 
